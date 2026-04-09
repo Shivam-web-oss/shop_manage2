@@ -1,0 +1,14 @@
+.landing-main {
+  padding: 2rem;
+  font-family: system-ui, sans-serif;
+}
+
+.landing-title {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+}
+
+.landing-description {
+  font-size: 1.1rem;
+  line-height: 1.6;
+}
