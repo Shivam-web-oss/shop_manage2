@@ -16,8 +16,16 @@ export default function LoginPage() {
 
     if (error) {
       alert(error.message)
+      return
+    }
+
+    const response = await fetch('/api/dashboard/check')
+    const data = await response.json()
+
+    if (response.ok && data.exists === false) {
+      window.location.href = '/dashboard/create'
     } else {
-      window.location.href = '/routes'
+      window.location.href = '/dashboard'
     }
   }
 

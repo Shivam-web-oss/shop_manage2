@@ -110,7 +110,7 @@ export default function ProfilePanel() {
               Logout
             </button>
             <a
-              href="/routes"
+              href="/dashboard"
               className="rounded-full border border-white/30 px-5 py-3 text-white hover:bg-white/10 transition"
             >
               Go to Dashboard
