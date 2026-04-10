@@ -1,3 +1,6 @@
+import { redirect } from 'next/navigation'
+import { createClient } from '../src/lib/supabase/server'
+
 const stats = [
   {
     label: "Total Shops",
@@ -50,7 +53,24 @@ const shops = [
   },
 ]
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  const { data: dashboard } = await supabase
+    .from('dashboards')
+    .select('*')
+    .eq('user_id', user.id)
+    .single()
+
+  if (!dashboard) {
+    redirect('/dashboard/create')
+  }
+
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8 sm:px-6 lg:px-8">
       <div className="mx-auto w-full max-w-7xl">
