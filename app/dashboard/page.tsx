@@ -1,58 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '../src/lib/supabase/server'
 
-const stats = [
-  {
-    label: "Total Shops",
-    value: "3",
-    description: "All active locations",
-    color: "bg-sky-100 text-sky-700",
-    icon: "Shop",
-  },
-  {
-    label: "Total Employees",
-    value: "16",
-    description: "Team members in all shops",
-    color: "bg-emerald-100 text-emerald-700",
-    icon: "Team",
-  },
-  {
-    label: "Total Revenue",
-    value: "$310K",
-    description: "Revenue generated this month",
-    color: "bg-violet-100 text-violet-700",
-    icon: "Money",
-  },
-  {
-    label: "Avg Revenue/Shop",
-    value: "$103K",
-    description: "Average shop performance",
-    color: "bg-orange-100 text-orange-700",
-    icon: "Chart",
-  },
-]
-
-const shops = [
-  {
-    name: "Downtown Store",
-    location: "New York, NY",
-    description: "Main flagship store in downtown Manhattan",
-    status: "active",
-  },
-  {
-    name: "Westside Branch",
-    location: "Los Angeles, CA",
-    description: "High-volume storefront near the westside mall",
-    status: "active",
-  },
-  {
-    name: "East Bay Outlet",
-    location: "Oakland, CA",
-    description: "Popular outlet store for local shoppers",
-    status: "active",
-  },
-]
-
 export default async function DashboardPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -61,15 +9,53 @@ export default async function DashboardPage() {
     redirect('/login')
   }
 
-  const { data: dashboard } = await supabase
+  const { data: dashboards, error } = await supabase
     .from('dashboards')
-    .select('*')
+    .select('id, company_name, shop_name, location, description, created_at')
     .eq('user_id', user.id)
-    .single()
+    .order('created_at', { ascending: true })
 
-  if (!dashboard) {
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  if (!dashboards || dashboards.length === 0) {
     redirect('/dashboard/create')
   }
+
+  const primaryDashboard = dashboards[0]
+  const newestDashboard = dashboards[dashboards.length - 1]
+
+  const stats = [
+    {
+      label: "Total Shops",
+      value: String(dashboards.length),
+      description: "All active locations",
+      color: "bg-sky-100 text-sky-700",
+      icon: "Shop",
+    },
+    {
+      label: "Company",
+      value: primaryDashboard.company_name,
+      description: "Primary company profile",
+      color: "bg-emerald-100 text-emerald-700",
+      icon: "HQ",
+    },
+    {
+      label: "Newest Shop",
+      value: newestDashboard.shop_name,
+      description: "Most recently added location",
+      color: "bg-violet-100 text-violet-700",
+      icon: "New",
+    },
+    {
+      label: "Profile Status",
+      value: "Active",
+      description: "Dashboard setup is complete",
+      color: "bg-orange-100 text-orange-700",
+      icon: "OK",
+    },
+  ]
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8 sm:px-6 lg:px-8">
@@ -87,7 +73,7 @@ export default async function DashboardPage() {
           </div>
 
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex-1 min-w-0">
+            <div className="min-w-0 flex-1">
               <h1 className="text-3xl font-semibold text-slate-900">Dashboard Overview</h1>
               <p className="mt-2 text-sm text-slate-600">Manage all your shops from one place.</p>
             </div>
@@ -128,27 +114,30 @@ export default async function DashboardPage() {
             </div>
             <div className="flex items-center gap-3">
               <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Active
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> {dashboards.length} Active
               </span>
             </div>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            {shops.map((shop) => (
-              <div key={shop.name} className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+            {dashboards.map((shop) => (
+              <div key={shop.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h3 className="text-xl font-semibold text-slate-900">{shop.name}</h3>
+                    <h3 className="text-xl font-semibold text-slate-900">{shop.shop_name}</h3>
                     <p className="mt-2 text-sm text-slate-600">{shop.location}</p>
                   </div>
                   <span className="rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-700">
-                    {shop.status}
+                    active
                   </span>
                 </div>
-                <p className="mt-4 text-sm leading-6 text-slate-600">{shop.description}</p>
+                <p className="mt-2 text-sm font-medium text-slate-700">{shop.company_name}</p>
+                <p className="mt-4 text-sm leading-6 text-slate-600">
+                  {shop.description || "No description added for this shop yet."}
+                </p>
                 <div className="mt-6 flex items-center justify-between text-sm text-slate-500">
                   <span>View details</span>
-                  <span className="text-violet-600">›</span>
+                  <span className="text-violet-600">&gt;</span>
                 </div>
               </div>
             ))}

@@ -27,35 +27,47 @@ export default function CreateDashboardPage() {
     setError("")
     setSuccess("")
 
-    if (!form.companyName || !form.shopName || !form.location) {
+    const payload = {
+      companyName: form.companyName.trim(),
+      shopName: form.shopName.trim(),
+      location: form.location.trim(),
+      description: form.description.trim(),
+    }
+
+    if (!payload.companyName || !payload.shopName || !payload.location) {
       setError("Please fill in all required fields.")
       return
     }
 
     setLoading(true)
 
-    const response = await fetch("/api/dashboard/create", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(form),
-    })
+    try {
+      const response = await fetch("/api/dashboard/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      })
 
-    const data = await response.json()
+      const data = await response.json().catch(() => ({}))
 
-    if (!response.ok) {
-      setError(data.message || "Unable to create dashboard.")
+      if (!response.ok) {
+        setError(data.message || "Unable to create dashboard.")
+        return
+      }
+
+      setSuccess("Dashboard created successfully!")
+      setForm(payload)
+
+      setTimeout(() => {
+        router.replace("/dashboard")
+      }, 1000)
+    } catch {
+      setError("Something went wrong while saving your dashboard.")
+    } finally {
       setLoading(false)
-      return
     }
-
-    setSuccess("Dashboard created successfully!")
-    setLoading(false)
-
-    setTimeout(() => {
-      router.replace("/dashboard")
-    }, 1000)
   }
 
   return (
@@ -71,41 +83,56 @@ export default function CreateDashboardPage() {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">Company name</label>
+            <label htmlFor="companyName" className="mb-2 block text-sm font-medium text-slate-700">
+              Company name
+            </label>
             <input
+              id="companyName"
               name="companyName"
               value={form.companyName}
               onChange={handleChange}
+              required
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
               placeholder="Example: Golden Bean Coffee"
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">Shop name</label>
+            <label htmlFor="shopName" className="mb-2 block text-sm font-medium text-slate-700">
+              Shop name
+            </label>
             <input
+              id="shopName"
               name="shopName"
               value={form.shopName}
               onChange={handleChange}
+              required
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
               placeholder="Example: Downtown Store"
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">Location</label>
+            <label htmlFor="location" className="mb-2 block text-sm font-medium text-slate-700">
+              Location
+            </label>
             <input
+              id="location"
               name="location"
               value={form.location}
               onChange={handleChange}
+              required
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
               placeholder="City, State"
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">Dashboard description</label>
+            <label htmlFor="description" className="mb-2 block text-sm font-medium text-slate-700">
+              Dashboard description
+            </label>
             <textarea
+              id="description"
               name="description"
               value={form.description}
               onChange={handleChange}
