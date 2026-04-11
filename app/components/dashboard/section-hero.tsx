@@ -19,12 +19,15 @@ export default function SectionHero({
   children,
 }: SectionHeroProps) {
   return (
-    <section className="overflow-hidden rounded-[32px] border border-white/20 bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.22),_transparent_38%),linear-gradient(135deg,_rgba(15,23,42,0.96),_rgba(30,41,59,0.94))] p-6 shadow-2xl shadow-slate-950/20 sm:p-8">
-      <p className="text-xs font-semibold uppercase tracking-[0.35em] text-cyan-200/80">{eyebrow}</p>
-      <div className="mt-5 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+    <section className="relative overflow-hidden rounded-[36px] border border-[var(--border)] bg-[linear-gradient(135deg,_rgba(12,15,15,0.98),_rgba(16,20,20,0.96)_54%,_rgba(28,36,34,0.94)_100%)] p-6 shadow-[0_30px_90px_rgba(0,0,0,0.34)] sm:p-8 lg:p-10">
+      <div className="pointer-events-none absolute -right-16 top-0 h-56 w-56 rounded-full bg-[rgba(201,246,199,0.12)] blur-3xl" />
+      <div className="pointer-events-none absolute bottom-0 left-0 h-48 w-48 rounded-full bg-[rgba(201,246,199,0.08)] blur-3xl" />
+      <div className="pointer-events-none absolute left-1/2 top-1/2 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/5 bg-[radial-gradient(circle,_rgba(201,246,199,0.08),_transparent_60%)]" />
+      <p className="relative text-xs font-semibold uppercase tracking-[0.35em] text-[var(--accent)]">{eyebrow}</p>
+      <div className="relative mt-5 flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-3xl">
-          <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">{title}</h1>
-          <p className="mt-4 text-sm leading-7 text-slate-200 sm:text-base">{description}</p>
+          <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">{title}</h1>
+          <p className="mt-4 max-w-2xl text-sm leading-7 text-[var(--ink-muted)] sm:text-base">{description}</p>
         </div>
 
         {(primaryAction || secondaryAction) && (
@@ -32,7 +35,7 @@ export default function SectionHero({
             {primaryAction && (
               <Link
                 href={primaryAction.href}
-                className="rounded-full bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+                className="rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-[#08100c] transition hover:bg-[#dbffda]"
               >
                 {primaryAction.label}
               </Link>
@@ -40,7 +43,7 @@ export default function SectionHero({
             {secondaryAction && (
               <Link
                 href={secondaryAction.href}
-                className="rounded-full border border-white/20 px-5 py-3 text-sm font-medium text-white transition hover:bg-white/10"
+                className="rounded-full border border-white/18 px-5 py-3 text-sm font-medium text-white transition hover:bg-white/10"
               >
                 {secondaryAction.label}
               </Link>
@@ -48,7 +51,7 @@ export default function SectionHero({
           </div>
         )}
       </div>
-      {children && <div className="mt-8">{children}</div>}
+      {children && <div className="relative mt-8">{children}</div>}
     </section>
   )
 }

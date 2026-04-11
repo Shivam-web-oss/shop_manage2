@@ -18,14 +18,14 @@ const supportLinks = [
 
 export default function Footer() {
   return (
-    <footer className="border-t border-white/10 bg-slate-950/90">
-      <div className="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1.4fr_1fr_1fr] lg:px-8">
+    <footer className="mt-10 border-t border-[var(--border)] bg-[rgba(9,12,12,0.96)]">
+      <div className="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1.5fr_1fr_1fr] lg:px-8">
         <div>
-          <p className="text-sm uppercase tracking-[0.28em] text-cyan-200/70">ShopManager</p>
-          <h2 className="mt-4 max-w-md text-2xl font-semibold text-white">
-            Keep every shop, order, customer, and report in one calm workspace.
+          <p className="text-sm uppercase tracking-[0.28em] text-[var(--accent)]">ShopManager</p>
+          <h2 className="mt-4 max-w-md text-3xl font-semibold text-white">
+            Keep every shop, order, customer, and report in one sharp workspace.
           </h2>
-          <p className="mt-4 max-w-xl text-sm leading-6 text-slate-300">
+          <p className="mt-4 max-w-xl text-sm leading-6 text-[var(--ink-muted)]">
             This dashboard now includes connected navigation, detailed shop views, and dedicated pages for the main management workflows.
           </p>
         </div>
@@ -34,7 +34,7 @@ export default function Footer() {
           <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-white/80">Product</h3>
           <div className="mt-4 flex flex-col gap-3">
             {productLinks.map((link) => (
-              <Link key={link.href} href={link.href} className="text-sm text-slate-300 transition hover:text-white">
+              <Link key={link.href} href={link.href} className="text-sm text-[var(--ink-muted)] transition hover:text-white">
                 {link.label}
               </Link>
             ))}
@@ -45,7 +45,7 @@ export default function Footer() {
           <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-white/80">Support</h3>
           <div className="mt-4 flex flex-col gap-3">
             {supportLinks.map((link) => (
-              <Link key={link.href} href={link.href} className="text-sm text-slate-300 transition hover:text-white">
+              <Link key={link.href} href={link.href} className="text-sm text-[var(--ink-muted)] transition hover:text-white">
                 {link.label}
               </Link>
             ))}
@@ -53,7 +53,7 @@ export default function Footer() {
         </div>
       </div>
 
-      <div className="border-t border-white/10 px-4 py-5 text-center text-sm text-slate-400 sm:px-6 lg:px-8">
+      <div className="border-t border-white/10 px-4 py-5 text-center text-sm text-[var(--ink-muted)] sm:px-6 lg:px-8">
         Copyright 2026 ShopManager. All rights reserved.
       </div>
     </footer>

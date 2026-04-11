@@ -40,54 +40,56 @@ export default async function ShopDetailsPage({ params }: PageProps) {
       >
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {highlights.map((item) => (
-            <div key={item.label} className="rounded-3xl border border-white/10 bg-white/90 p-5 shadow-lg shadow-slate-950/10">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">{item.label}</p>
-              <p className="mt-3 text-xl font-semibold text-slate-900">{item.value}</p>
+            <div key={item.label} className="rounded-[28px] border border-[var(--border)] bg-[rgba(255,255,255,0.04)] p-5 shadow-lg shadow-black/20">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--ink-muted)]">{item.label}</p>
+              <p className="mt-3 text-xl font-semibold text-[var(--foreground)]">{item.value}</p>
             </div>
           ))}
         </div>
       </SectionHero>
 
       <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-300/30">
-          <h2 className="text-2xl font-semibold text-slate-900">About this shop</h2>
-          <p className="mt-4 text-sm leading-7 text-slate-600">
+        <div className="rounded-[36px] border border-[var(--border)] bg-[rgba(17,22,22,0.84)] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[var(--accent)]">Profile</p>
+          <h2 className="mt-3 text-3xl font-semibold text-[var(--foreground)]">About this shop</h2>
+          <p className="mt-4 text-sm leading-7 text-[var(--ink-muted)]">
             {shop.description || "No description has been saved yet. You can still use this shop page as the hub for inventory, order handling, customers, and reporting."}
           </p>
 
           <dl className="mt-8 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-3xl bg-slate-50 p-5">
-              <dt className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Company</dt>
-              <dd className="mt-2 text-lg font-semibold text-slate-900">{shop.company_name}</dd>
+            <div className="rounded-[28px] border border-[var(--border)] bg-[rgba(255,255,255,0.03)] p-5">
+              <dt className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--ink-muted)]">Company</dt>
+              <dd className="mt-2 text-lg font-semibold text-[var(--foreground)]">{shop.company_name}</dd>
             </div>
-            <div className="rounded-3xl bg-slate-50 p-5">
-              <dt className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Location</dt>
-              <dd className="mt-2 text-lg font-semibold text-slate-900">{shop.location}</dd>
+            <div className="rounded-[28px] border border-[var(--border)] bg-[rgba(255,255,255,0.03)] p-5">
+              <dt className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--ink-muted)]">Location</dt>
+              <dd className="mt-2 text-lg font-semibold text-[var(--foreground)]">{shop.location}</dd>
             </div>
-            <div className="rounded-3xl bg-slate-50 p-5">
-              <dt className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Created</dt>
-              <dd className="mt-2 text-lg font-semibold text-slate-900">{new Date(shop.created_at).toLocaleDateString()}</dd>
+            <div className="rounded-[28px] border border-[var(--border)] bg-[rgba(255,255,255,0.03)] p-5">
+              <dt className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--ink-muted)]">Created</dt>
+              <dd className="mt-2 text-lg font-semibold text-[var(--foreground)]">{new Date(shop.created_at).toLocaleDateString()}</dd>
             </div>
-            <div className="rounded-3xl bg-slate-50 p-5">
-              <dt className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Status</dt>
-              <dd className="mt-2 text-lg font-semibold text-emerald-700">Active</dd>
+            <div className="rounded-[28px] border border-[var(--border)] bg-[rgba(255,255,255,0.03)] p-5">
+              <dt className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--ink-muted)]">Status</dt>
+              <dd className="mt-2 text-lg font-semibold text-emerald-300">Active</dd>
             </div>
           </dl>
         </div>
 
-        <aside className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-300/30">
-          <h2 className="text-2xl font-semibold text-slate-900">Next actions</h2>
+        <aside className="rounded-[36px] border border-[var(--border)] bg-[linear-gradient(160deg,rgba(18,22,22,0.98),rgba(24,32,31,0.92))] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[var(--accent)]">Action Deck</p>
+          <h2 className="mt-3 text-3xl font-semibold text-[var(--foreground)]">Next actions</h2>
           <div className="mt-5 flex flex-col gap-3">
-            <Link href="/dashboard/inventory" className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
+            <Link href="/dashboard/inventory" className="rounded-[24px] bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-[#08100c] transition hover:bg-[#dbffda]">
               Open inventory workspace
             </Link>
-            <Link href="/dashboard/orders" className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
+            <Link href="/dashboard/orders" className="rounded-[24px] border border-[var(--border)] bg-white/4 px-4 py-3 text-sm font-medium text-[var(--foreground)] transition hover:bg-white/6">
               Check pending orders
             </Link>
-            <Link href="/dashboard/customers" className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
+            <Link href="/dashboard/customers" className="rounded-[24px] border border-[var(--border)] bg-white/4 px-4 py-3 text-sm font-medium text-[var(--foreground)] transition hover:bg-white/6">
               Review customer activity
             </Link>
-            <Link href="/dashboard/reports" className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
+            <Link href="/dashboard/reports" className="rounded-[24px] border border-[var(--border)] bg-white/4 px-4 py-3 text-sm font-medium text-[var(--foreground)] transition hover:bg-white/6">
               View performance reports
             </Link>
           </div>
