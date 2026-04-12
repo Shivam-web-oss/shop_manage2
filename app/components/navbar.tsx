@@ -78,7 +78,6 @@ export default function Navbar() {
           type="button"
           onClick={() => setMobileOpen((open) => !open)}
           className="rounded-full border border-white/15 p-2 text-white md:hidden"
-          aria-expanded={mobileOpen}
           aria-label="Toggle navigation"
         >
           <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">

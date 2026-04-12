@@ -50,6 +50,7 @@ export default function LoginPage() {
         >
           Login
         </button>
+        DO NOT HAVE AN ACCOUNT? <a href="/register" className="text-white/80 hover:underline">Sign Up</a>
       </div>
     </div>
   )
