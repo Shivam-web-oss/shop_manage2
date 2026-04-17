@@ -1,9 +1,10 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname } from "next/navigation"
 import { useState } from "react"
-import { createClient } from "../src/lib/supabase/client"
+import { useFormStatus } from "react-dom"
+import { logoutAction } from "../actions/auth"
 
 const primaryLinks = [
   { href: "/business", label: "Business" },
@@ -15,17 +16,7 @@ const primaryLinks = [
 
 export default function Navbar() {
   const pathname = usePathname()
-  const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [loggingOut, setLoggingOut] = useState(false)
-
-  const handleLogout = async () => {
-    setLoggingOut(true)
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.replace("/login")
-    router.refresh()
-  }
 
   const isActive = (href) => pathname === href || pathname.startsWith(`${href}/`)
 
@@ -64,14 +55,9 @@ export default function Navbar() {
           >
             Profile
           </Link>
-          <button
-            type="button"
-            onClick={handleLogout}
-            disabled={loggingOut}
-            className="rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[#08100c] transition hover:bg-[#dcffd9] disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {loggingOut ? "Logging out..." : "Logout"}
-          </button>
+          <form action={logoutAction}>
+            <LogoutButton className="rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[#08100c] transition hover:bg-[#dcffd9] disabled:cursor-not-allowed disabled:opacity-70" />
+          </form>
         </div>
 
         <button
@@ -110,17 +96,26 @@ export default function Navbar() {
             >
               Profile
             </Link>
-            <button
-              type="button"
-              onClick={handleLogout}
-              disabled={loggingOut}
-              className="rounded-2xl bg-[var(--accent)] px-4 py-3 text-left text-sm font-semibold text-[#08100c] disabled:opacity-70"
-            >
-              {loggingOut ? "Logging out..." : "Logout"}
-            </button>
+            <form action={logoutAction}>
+              <LogoutButton className="rounded-2xl bg-[var(--accent)] px-4 py-3 text-left text-sm font-semibold text-[#08100c] disabled:opacity-70" />
+            </form>
           </div>
         </div>
       )}
     </nav>
+  )
+}
+
+function LogoutButton({ className }) {
+  const { pending } = useFormStatus()
+
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className={className}
+    >
+      {pending ? "Logging out..." : "Logout"}
+    </button>
   )
 }
