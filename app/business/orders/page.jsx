@@ -1,46 +1,26 @@
-import SectionHero from "@/app/components/business/section-hero"
-import { getUserDashboards } from "@/lib/business"
+import Link from "next/link"
+import ProductsManager from "@/app/components/business/products-manager"
+import { ROLES, requireRole } from "@/lib/authz"
 
-export default async function OrdersPage() {
-  const dashboards = await getUserDashboards()
-  const orders = dashboards.map((shop, index) => ({
-    shopName: shop.shop_name,
-    queue: 6 + index * 3,
-    preparing: 3 + index,
-    delayed: index,
-  }))
+export default async function BusinessProductsPage() {
+  await requireRole([ROLES.BUSINESS])
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-8">
-      <SectionHero
-        eyebrow="Orders"
-        title="Order flow"
-        description="See how many orders need attention at each location. The order-related buttons now land here instead of leaving your team stranded."
-        primaryAction={{ href: "/business", label: "Back to Overview" }}
-        secondaryAction={{ href: "/business/customers", label: "Customer Activity" }}
-      />
-
-      <section className="grid gap-4 md:grid-cols-3">
-        {orders.map((order) => (
-          <article key={order.shopName} className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-lg shadow-slate-300/20">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">{order.shopName}</p>
-            <div className="mt-5 space-y-4">
-              <div>
-                <p className="text-sm text-slate-500">Queued</p>
-                <p className="text-3xl font-semibold text-slate-900">{order.queue}</p>
-              </div>
-              <div>
-                <p className="text-sm text-slate-500">Preparing</p>
-                <p className="text-2xl font-semibold text-amber-600">{order.preparing}</p>
-              </div>
-              <div>
-                <p className="text-sm text-slate-500">Delayed</p>
-                <p className="text-2xl font-semibold text-rose-600">{order.delayed}</p>
-              </div>
-            </div>
-          </article>
-        ))}
+    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+      <section className="ui-card rounded-3xl p-6">
+        <p className="text-xs uppercase tracking-[0.2em] text-[var(--accent-deep)]">Product Management</p>
+        <h1 className="mt-3 text-3xl font-semibold text-[var(--foreground)]">Create, Edit, and Delete Products</h1>
+        <p className="mt-2 text-sm text-[var(--ink-muted)]">
+          Business users can fully manage product details including name, price, quantity, and unit.
+        </p>
+        <div className="mt-4">
+          <Link href="/business" className="ui-btn-secondary px-4 py-2 text-sm">
+            Back to Business Home
+          </Link>
+        </div>
       </section>
+
+      <ProductsManager />
     </div>
   )
 }

@@ -1,40 +1,26 @@
-import SectionHero from "@/app/components/business/section-hero"
-import { getUserDashboards } from "@/lib/business"
+import Link from "next/link"
+import ActivityBoard from "@/app/components/business/activity-board"
+import { ROLES, requireRole } from "@/lib/authz"
 
-export default async function ReportsPage() {
-  const dashboards = await getUserDashboards()
-  const reportRows = dashboards.map((shop, index) => ({
-    shopName: shop.shop_name,
-    revenue: 25000 + index * 4200,
-    margin: 18 + index * 2,
-    growth: 6 + index * 1.5,
-  }))
+export default async function BusinessReportsPage() {
+  await requireRole([ROLES.BUSINESS])
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-8">
-      <SectionHero
-        eyebrow="Reports"
-        title="Performance snapshot"
-        description="A simple reporting hub for revenue, margin, and growth trends. The reports button now leads to a dedicated summary page instead of a placeholder."
-        primaryAction={{ href: "/business/orders", label: "Check Orders" }}
-        secondaryAction={{ href: "/business/inventory", label: "Inventory Board" }}
-      />
-
-      <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-300/30">
-        <div className="grid gap-4 md:grid-cols-3">
-          {reportRows.map((row) => (
-            <article key={row.shopName} className="rounded-[28px] bg-slate-50 p-6">
-              <h2 className="text-xl font-semibold text-slate-900">{row.shopName}</h2>
-              <p className="mt-5 text-sm text-slate-500">Monthly revenue</p>
-              <p className="mt-2 text-3xl font-semibold text-slate-900">${row.revenue.toLocaleString()}</p>
-              <p className="mt-5 text-sm text-slate-500">Profit margin</p>
-              <p className="mt-2 text-2xl font-semibold text-emerald-700">{row.margin}%</p>
-              <p className="mt-5 text-sm text-slate-500">Growth</p>
-              <p className="mt-2 text-2xl font-semibold text-cyan-700">+{row.growth.toFixed(1)}%</p>
-            </article>
-          ))}
+    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+      <section className="ui-card rounded-3xl p-6">
+        <p className="text-xs uppercase tracking-[0.2em] text-[var(--accent-deep)]">Dashboard Reports</p>
+        <h1 className="mt-3 text-3xl font-semibold text-[var(--foreground)]">Complete Activity View</h1>
+        <p className="mt-2 text-sm text-[var(--ink-muted)]">
+          See real-time business activity including bills, stock updates, and key metrics.
+        </p>
+        <div className="mt-4">
+          <Link href="/business" className="ui-btn-secondary px-4 py-2 text-sm">
+            Back to Business Home
+          </Link>
         </div>
       </section>
+
+      <ActivityBoard limit={40} />
     </div>
   )
 }

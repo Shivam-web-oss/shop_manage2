@@ -7,7 +7,11 @@ export async function POST(req) {
     const name = body.name?.trim()
     const email = body.email?.trim().toLowerCase()
     const password = body.password
-    const selectedRole = body.role === "staff" ? "staff" : "admin"
+    const incomingRole = String(body.role ?? "").trim().toLowerCase()
+    const selectedRole =
+      incomingRole === "admin" || incomingRole === "staff" || incomingRole === "business" || incomingRole === "bussiness"
+        ? (incomingRole === "bussiness" ? "business" : incomingRole)
+        : "business"
 
     if (!name || !email || !password) {
       return NextResponse.json(

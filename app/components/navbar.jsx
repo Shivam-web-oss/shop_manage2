@@ -6,28 +6,49 @@ import { useState } from "react"
 import { useFormStatus } from "react-dom"
 import { logoutAction } from "../actions/auth"
 
-const primaryLinks = [
+const BUSINESS_LINKS = [
   { href: "/business", label: "Business" },
+  { href: "/business/create", label: "Shops" },
   { href: "/business/inventory", label: "Inventory" },
-  { href: "/business/orders", label: "Orders" },
-  { href: "/business/customers", label: "Customers" },
+  { href: "/business/orders", label: "Products" },
+  { href: "/business/staff", label: "Staff" },
   { href: "/business/reports", label: "Reports" },
 ]
+
+const EMPLOYEE_LINKS = [
+  { href: "/employee", label: "Employee" },
+  { href: "/employee/stock", label: "Stock" },
+  { href: "/employee/bill", label: "Billing" },
+  { href: "/employee/reports", label: "Reports" },
+]
+
+const CUSTOMER_ROUTE_PREFIXES = ["/business", "/employee", "/profile"]
 
 export default function Navbar() {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
 
+  const showNavbar =
+    Boolean(pathname) &&
+    CUSTOMER_ROUTE_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))
+
+  if (!showNavbar) {
+    return null
+  }
+
+  const isEmployeeArea = pathname.startsWith("/employee")
+  const primaryLinks = isEmployeeArea ? EMPLOYEE_LINKS : BUSINESS_LINKS
+  const homeHref = isEmployeeArea ? "/employee" : "/business"
   const isActive = (href) => pathname === href || pathname.startsWith(`${href}/`)
 
   return (
     <nav className="fixed inset-x-0 top-0 z-50 px-4 pt-4 sm:px-6 lg:px-8">
-      <div className="mx-auto flex max-w-7xl items-center justify-between rounded-full border border-[var(--border)] bg-[rgba(9,12,12,0.78)] px-4 py-3 shadow-[0_18px_60px_rgba(0,0,0,0.34)] backdrop-blur-xl">
+      <div className="mx-auto flex max-w-7xl items-center justify-between rounded-2xl border border-[var(--border)] bg-[rgba(255,255,255,0.88)] px-4 py-3 shadow-[0_14px_34px_rgba(15,23,42,0.12)] backdrop-blur-xl">
         <div className="flex items-center gap-3">
-          <Link href="/business" className="text-xl font-semibold tracking-tight text-white">
+          <Link href={homeHref} className="text-xl font-semibold tracking-tight text-[var(--foreground)]">
             ShopManager
           </Link>
-          <span className="hidden rounded-full border border-[rgba(201,246,199,0.14)] bg-[rgba(201,246,199,0.08)] px-3 py-1 text-xs font-medium uppercase tracking-[0.22em] text-[var(--accent)] sm:inline-flex">
+          <span className="hidden rounded-full border border-[rgba(47,158,107,0.24)] bg-[var(--accent-soft)] px-3 py-1 text-xs font-medium uppercase tracking-[0.22em] text-[var(--accent-deep)] sm:inline-flex">
             Studio
           </span>
         </div>
@@ -39,8 +60,8 @@ export default function Navbar() {
               href={link.href}
                 className={`rounded-full px-4 py-2 text-sm transition ${
                   isActive(link.href)
-                  ? "bg-[var(--accent)] text-[#08100c]"
-                  : "text-white/72 hover:bg-white/8 hover:text-white"
+                  ? "bg-[var(--accent-soft)] text-[var(--accent-deep)]"
+                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                 }`}
               >
                 {link.label}
@@ -51,19 +72,19 @@ export default function Navbar() {
         <div className="hidden items-center gap-3 md:flex">
           <Link
             href="/profile"
-            className="rounded-full border border-white/15 px-4 py-2 text-sm font-medium text-white/85 transition hover:bg-white/10 hover:text-white"
+            className="rounded-full border border-[var(--border)] px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
           >
             Profile
           </Link>
           <form action={logoutAction}>
-            <LogoutButton className="rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[#08100c] transition hover:bg-[#dcffd9] disabled:cursor-not-allowed disabled:opacity-70" />
+            <LogoutButton className="rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent-deep)] disabled:cursor-not-allowed disabled:opacity-70" />
           </form>
         </div>
 
         <button
           type="button"
           onClick={() => setMobileOpen((open) => !open)}
-          className="rounded-full border border-white/15 p-2 text-white md:hidden"
+          className="rounded-full border border-[var(--border)] p-2 text-slate-700 md:hidden"
           aria-label="Toggle navigation"
         >
           <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -73,7 +94,7 @@ export default function Navbar() {
       </div>
 
       {mobileOpen && (
-        <div className="mt-3 rounded-[28px] border border-[var(--border)] bg-[rgba(9,12,12,0.94)] px-4 py-4 shadow-[0_18px_60px_rgba(0,0,0,0.34)] md:hidden">
+        <div className="mt-3 rounded-[28px] border border-[var(--border)] bg-[rgba(255,255,255,0.95)] px-4 py-4 shadow-[0_14px_34px_rgba(15,23,42,0.12)] md:hidden">
           <div className="flex flex-col gap-2">
             {primaryLinks.map((link) => (
               <Link
@@ -82,8 +103,8 @@ export default function Navbar() {
                 onClick={() => setMobileOpen(false)}
                 className={`rounded-2xl px-4 py-3 text-sm transition ${
                   isActive(link.href)
-                    ? "bg-[var(--accent)] text-[#08100c]"
-                    : "text-white/80 hover:bg-white/10 hover:text-white"
+                    ? "bg-[var(--accent-soft)] text-[var(--accent-deep)]"
+                    : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
                 }`}
               >
                 {link.label}
@@ -92,12 +113,12 @@ export default function Navbar() {
             <Link
               href="/profile"
               onClick={() => setMobileOpen(false)}
-              className="rounded-2xl border border-white/15 px-4 py-3 text-sm text-white/85"
+              className="rounded-2xl border border-[var(--border)] px-4 py-3 text-sm text-slate-700"
             >
               Profile
             </Link>
             <form action={logoutAction}>
-              <LogoutButton className="rounded-2xl bg-[var(--accent)] px-4 py-3 text-left text-sm font-semibold text-[#08100c] disabled:opacity-70" />
+              <LogoutButton className="rounded-2xl bg-[var(--accent)] px-4 py-3 text-left text-sm font-semibold text-white disabled:opacity-70" />
             </form>
           </div>
         </div>

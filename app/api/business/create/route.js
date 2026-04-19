@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "../../../src/lib/supabase/server"
+import { ROLES } from "@/lib/authz"
 
 export async function POST(request) {
   try {
@@ -21,6 +22,20 @@ export async function POST(request) {
 
     if (authError || !user) {
       return NextResponse.json({ message: "Authentication required." }, { status: 401 })
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle()
+
+    if (profileError) {
+      return NextResponse.json({ message: profileError.message }, { status: 400 })
+    }
+
+    if ((profile?.role ?? user.user_metadata?.role) !== ROLES.BUSINESS) {
+      return NextResponse.json({ message: "Only business users can create shops." }, { status: 403 })
     }
 
     const { error } = await supabase.from("business").insert({

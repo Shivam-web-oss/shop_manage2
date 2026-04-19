@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation'
 import { createClient } from '../src/lib/supabase/server'
+import { normalizeRole, ROLES } from '@/lib/authz'
 
 function normalizeValue(value) {
   return typeof value === 'string' ? value.trim() : ''
@@ -37,8 +38,14 @@ export async function loginAction(_state, formData) {
     return { error: profileError.message }
   }
 
-  if (profile?.role === 'admin') {
+  const role = normalizeRole(profile?.role ?? data.user.user_metadata?.role)
+
+  if (role === ROLES.ADMIN) {
     redirect('/admin')
+  }
+
+  if (role === ROLES.STAFF) {
+    redirect('/employee')
   }
 
   const { data: business, error: businessError } = await supabase

@@ -1,159 +1,120 @@
 "use client"
 
-import { useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useState } from "react"
 
-export default function CreateDashboardPage() {
+const INITIAL_FORM = {
+  companyName: "",
+  shopName: "",
+  location: "",
+  description: "",
+}
+
+export default function CreateShopPage() {
   const router = useRouter()
-  const [form, setForm] = useState({
-    companyName: "",
-    shopName: "",
-    location: "",
-    description: "",
-  })
-  const [error, setError] = useState("")
-  const [success, setSuccess] = useState("")
+  const [form, setForm] = useState(INITIAL_FORM)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const [message, setMessage] = useState("")
 
-  const handleChange = (e) => {
-    setForm({
-      ...form,
-      [e.target.name]: e.target.value,
-    })
-  }
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
+  async function handleSubmit(event) {
+    event.preventDefault()
     setError("")
-    setSuccess("")
+    setMessage("")
 
-    const payload = {
-      companyName: form.companyName.trim(),
-      shopName: form.shopName.trim(),
-      location: form.location.trim(),
-      description: form.description.trim(),
-    }
-
-    if (!payload.companyName || !payload.shopName || !payload.location) {
-      setError("Please fill in all required fields.")
+    if (!form.companyName.trim() || !form.shopName.trim() || !form.location.trim()) {
+      setError("Company name, shop name, and location are required.")
       return
     }
 
     setLoading(true)
-
     try {
-      const response = await fetch("/api/business/create", {
+      const response = await fetch("/api/business", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyName: form.companyName.trim(),
+          shopName: form.shopName.trim(),
+          location: form.location.trim(),
+          description: form.description.trim(),
+        }),
       })
 
       const data = await response.json().catch(() => ({}))
-
       if (!response.ok) {
-        setError(data.message || "Unable to create business.")
-        return
+        throw new Error(data.message || "Unable to create shop.")
       }
 
-      setSuccess("Business created successfully!")
-      setForm(payload)
-
+      setMessage("Shop created successfully.")
+      setForm(INITIAL_FORM)
       setTimeout(() => {
         router.replace("/business")
-      }, 1000)
-    } catch {
-      setError("Something went wrong while saving your business.")
+        router.refresh()
+      }, 700)
+    } catch (submitError) {
+      setError(submitError.message || "Unable to create shop.")
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-3xl rounded-[32px] bg-white/95 p-8 shadow-xl shadow-slate-200/40 backdrop-blur-xl">
-        <div className="mb-8">
-          <p className="text-sm uppercase tracking-[0.18em] text-slate-500">Welcome to ShopManager</p>
-          <h1 className="mt-4 text-3xl font-semibold text-slate-900">Create your new business</h1>
-          <p className="mt-3 text-sm leading-6 text-slate-600">
-            Tell us a little about your first shop and we will save your business profile.
-          </p>
-        </div>
+    <div className="mx-auto max-w-3xl">
+      <section className="ui-card rounded-3xl p-6">
+        <p className="text-xs uppercase tracking-[0.2em] text-[var(--accent-deep)]">Shop Setup</p>
+        <h1 className="mt-3 text-3xl font-semibold text-[var(--foreground)]">Create New Shop</h1>
+        <p className="mt-2 text-sm text-[var(--ink-muted)]">
+          Fill this once. You can edit or delete the shop anytime from shop details.
+        </p>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label htmlFor="companyName" className="mb-2 block text-sm font-medium text-slate-700">
-              Company name
-            </label>
-            <input
-              id="companyName"
-              name="companyName"
-              value={form.companyName}
-              onChange={handleChange}
-              required
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
-              placeholder="Example: Golden Bean Coffee"
-            />
+        <form onSubmit={handleSubmit} className="mt-5 space-y-3">
+          <input
+            className="ui-input"
+            placeholder="Company name"
+            value={form.companyName}
+            onChange={(event) => setForm((previous) => ({ ...previous, companyName: event.target.value }))}
+            required
+          />
+          <input
+            className="ui-input"
+            placeholder="Shop name"
+            value={form.shopName}
+            onChange={(event) => setForm((previous) => ({ ...previous, shopName: event.target.value }))}
+            required
+          />
+          <input
+            className="ui-input"
+            placeholder="Location"
+            value={form.location}
+            onChange={(event) => setForm((previous) => ({ ...previous, location: event.target.value }))}
+            required
+          />
+          <textarea
+            className="ui-textarea"
+            rows={4}
+            placeholder="Description (optional)"
+            value={form.description}
+            onChange={(event) => setForm((previous) => ({ ...previous, description: event.target.value }))}
+          />
+
+          {error ? <p className="text-sm text-red-600">{error}</p> : null}
+          {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="submit"
+              disabled={loading}
+              className="ui-btn-primary px-5 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {loading ? "Creating..." : "Create Shop"}
+            </button>
+            <Link href="/business" className="ui-btn-secondary px-5 py-3 text-sm">
+              Back to Business
+            </Link>
           </div>
-
-          <div>
-            <label htmlFor="shopName" className="mb-2 block text-sm font-medium text-slate-700">
-              Shop name
-            </label>
-            <input
-              id="shopName"
-              name="shopName"
-              value={form.shopName}
-              onChange={handleChange}
-              required
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
-              placeholder="Example: Downtown Store"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="location" className="mb-2 block text-sm font-medium text-slate-700">
-              Location
-            </label>
-            <input
-              id="location"
-              name="location"
-              value={form.location}
-              onChange={handleChange}
-              required
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
-              placeholder="City, State"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="description" className="mb-2 block text-sm font-medium text-slate-700">
-              Business description
-            </label>
-            <textarea
-              id="description"
-              name="description"
-              value={form.description}
-              onChange={handleChange}
-              rows={4}
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
-              placeholder="Describe the shop or business purpose"
-            />
-          </div>
-
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          {success && <p className="text-sm text-emerald-600">{success}</p>}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-2xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {loading ? "Saving business..." : "Create business"}
-          </button>
         </form>
-      </div>
+      </section>
     </div>
   )
 }

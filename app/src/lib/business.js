@@ -1,17 +1,13 @@
-import { redirect } from "next/navigation"
-import { createClient } from "./supabase/server"
+import { ROLES, requireRole } from "./authz"
 
 export async function getAuthenticatedUser() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    redirect("/login")
+  const context = await requireRole([ROLES.BUSINESS])
+  return {
+    supabase: context.supabase,
+    user: context.user,
+    profile: context.profile,
+    role: context.role,
   }
-
-  return { supabase, user }
 }
 
 export async function getUserDashboards() {

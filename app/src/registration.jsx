@@ -1,51 +1,48 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { useState } from "react"
 
 export default function RegisterPage() {
-  const router = useRouter();
+  const router = useRouter()
 
   const [form, setForm] = useState({
     name: "",
     email: "",
     password: "",
-    role: "admin",
-  });
+    role: "business",
+  })
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  function handleChange(event) {
+    setForm((previous) => ({
+      ...previous,
+      [event.target.name]: event.target.value,
+    }))
+  }
 
-  const handleChange = (e) => {
-    setForm({
-      ...form,
-      [e.target.name]: e.target.value,
-    });
-  };
-  
+  async function handleSubmit(event) {
+    event.preventDefault()
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    // Basic validation (don’t skip this)
     if (!form.name || !form.email || !form.password) {
-      setError("All fields are required");
-      return;
+      setError("All fields are required.")
+      return
     }
 
     if (form.password.length < 6) {
-      setError("Password must be at least 6 characters");
-      return;
+      setError("Password must be at least 6 characters.")
+      return
     }
-    
-    setLoading(true);
-    setError("");
-    setSuccess("");
+
+    setLoading(true)
+    setError("")
+    setSuccess("")
 
     try {
-      const res = await fetch("/api/register", {
+      const response = await fetch("/api/register", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -58,47 +55,35 @@ export default function RegisterPage() {
         }),
       })
 
-      const data = await res.json().catch(() => ({}))
+      const data = await response.json().catch(() => ({}))
 
-      if (!res.ok) {
-        throw new Error(data.message || "Registration failed")
+      if (!response.ok) {
+        throw new Error(data.message || "Registration failed.")
       }
 
-      setSuccess(
-        data.user?.id
-          ? `${data.message || "Account created successfully"} UUID: ${data.user.id}`
-          : data.message || "Account created successfully"
-      )
-
-      // Redirect after success
+      setSuccess(data.message || "Account created successfully.")
       setTimeout(() => {
-        router.replace("/login");
-      }, 1000);
-
-    } catch (err) {
-      setError(err.message || "Something went wrong");
+        router.replace("/login")
+      }, 1000)
+    } catch (submitError) {
+      setError(submitError.message || "Something went wrong.")
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false);
-  };
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center px-6 py-16">
-      <form
-        onSubmit={handleSubmit}
-        className="glass rounded-3xl w-full max-w-md p-8 shadow-2xl"
-      >
-        <h1 className="text-2xl font-bold text-center mb-6 text-white">
-          Create Account
-        </h1>
+      <form onSubmit={handleSubmit} className="glass w-full max-w-md rounded-3xl p-8 shadow-2xl">
+        <h1 className="mb-6 text-center text-2xl font-bold text-[var(--foreground)]">Create Account</h1>
 
         <input
           type="text"
           name="name"
-          placeholder="Full Name"
+          placeholder="Full name"
           value={form.name}
           onChange={handleChange}
-          className="w-full mb-4 p-3 border border-white/20 rounded-lg bg-white/10 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50"
+          className="ui-input mb-4"
         />
 
         <input
@@ -107,7 +92,7 @@ export default function RegisterPage() {
           placeholder="Email"
           value={form.email}
           onChange={handleChange}
-          className="w-full mb-4 p-3 border border-white/20 rounded-lg bg-white/10 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50"
+          className="ui-input mb-4"
         />
 
         <input
@@ -116,49 +101,39 @@ export default function RegisterPage() {
           placeholder="Password"
           value={form.password}
           onChange={handleChange}
-          className="w-full mb-4 p-3 border border-white/20 rounded-lg bg-white/10 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50"
+          className="ui-input mb-4"
         />
 
         <select
-          title="role"
+          title="Role"
           name="role"
           value={form.role}
           onChange={handleChange}
-          className="w-full mb-4 p-3 border border-white/20 rounded-lg bg-white/10 text-white focus:outline-none"
+          className="ui-select mb-4"
         >
-          <option value="staff">Staff</option>
           <option value="admin">Admin</option>
+          <option value="business">Business Owner</option>
+          <option value="staff">Staff</option>
         </select>
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-white/20 text-white p-3 rounded-lg hover:bg-white/30 transition backdrop-blur-sm border border-white/30"
+          className="ui-btn-primary w-full px-5 py-3 disabled:cursor-not-allowed disabled:opacity-70"
         >
           {loading ? "Creating account..." : "Register"}
         </button>
 
-        {/* Feedback */}
-        {error && (
-          <p className="mt-4 text-red-300 text-sm text-center">
-            {error}
-          </p>
-        )}
+        {error && <p className="mt-4 text-center text-sm text-red-600">{error}</p>}
+        {success && <p className="mt-4 text-center text-sm text-emerald-700">{success}</p>}
 
-        {success && (
-          <p className="mt-4 text-green-300 text-sm text-center">
-            {success}
-          </p>
-        )}
-
-        {/* Navigation */}
-        <p className="mt-4 text-center text-sm text-white/80">
+        <p className="mt-4 text-center text-sm text-[var(--ink-muted)]">
           Already have an account?{" "}
-          <Link href="/login" className="text-white hover:text-white/80 underline">
+          <Link href="/login" className="font-medium text-[var(--accent-deep)] hover:underline">
             Login
           </Link>
         </p>
       </form>
     </div>
-  );
+  )
 }

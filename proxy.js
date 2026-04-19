@@ -1,6 +1,33 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 
+const ROLES = Object.freeze({
+  ADMIN: 'admin',
+  BUSINESS: 'business',
+  STAFF: 'staff',
+})
+
+function normalizeRole(role) {
+  const normalized = String(role ?? '')
+    .trim()
+    .toLowerCase()
+
+  if (normalized === ROLES.ADMIN) return ROLES.ADMIN
+  if (normalized === ROLES.STAFF) return ROLES.STAFF
+  if (normalized === ROLES.BUSINESS || normalized === 'bussiness') return ROLES.BUSINESS
+  return ROLES.BUSINESS
+}
+
+function getHomeRouteByRole(role) {
+  if (role === ROLES.ADMIN) return '/admin'
+  if (role === ROLES.STAFF) return '/employee'
+  return '/business'
+}
+
+function canAccessEmployeeWorkspace(role) {
+  return role === ROLES.STAFF || role === ROLES.BUSINESS
+}
+
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
@@ -77,13 +104,34 @@ export async function proxy(request) {
     .eq('id', user.id)
     .maybeSingle()
 
-  if (profileError || profile?.role !== 'admin') {
-    return copyResponseMeta(response, NextResponse.redirect(new URL('/business', request.url)))
+  if (profileError) {
+    return copyResponseMeta(response, NextResponse.redirect(new URL('/login', request.url)))
+  }
+
+  const role = normalizeRole(profile?.role ?? user.user_metadata?.role)
+  const pathname = request.nextUrl.pathname
+
+  if (pathname.startsWith('/admin')) {
+    if (role !== ROLES.ADMIN) {
+      return copyResponseMeta(response, NextResponse.redirect(new URL(getHomeRouteByRole(role), request.url)))
+    }
+  }
+
+  if (pathname.startsWith('/business')) {
+    if (role !== ROLES.BUSINESS) {
+      return copyResponseMeta(response, NextResponse.redirect(new URL(getHomeRouteByRole(role), request.url)))
+    }
+  }
+
+  if (pathname.startsWith('/employee')) {
+    if (!canAccessEmployeeWorkspace(role)) {
+      return copyResponseMeta(response, NextResponse.redirect(new URL(getHomeRouteByRole(role), request.url)))
+    }
   }
 
   return response
 }
 
 export const config = {
-  matcher: ['/admin/:path*'],
+  matcher: ['/admin/:path*', '/business/:path*', '/employee/:path*', '/profile/:path*'],
 }

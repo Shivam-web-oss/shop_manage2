@@ -3,7 +3,7 @@ import Link from "next/link"
 const productLinks = [
   { href: "/business", label: "Business" },
   { href: "/business/inventory", label: "Inventory" },
-  { href: "/business/orders", label: "Orders" },
+  { href: "/business/orders", label: "Products" },
   { href: "/business/customers", label: "Customers" },
   { href: "/business/reports", label: "Reports" },
 ]
@@ -18,11 +18,11 @@ const supportLinks = [
 
 export default function Footer() {
   return (
-    <footer className="mt-10 border-t border-[var(--border)] bg-[rgba(9,12,12,0.96)]">
+    <footer className="mt-10 border-t border-[var(--border)] bg-[rgba(255,255,255,0.86)]">
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1.5fr_1fr_1fr] lg:px-8">
         <div>
-          <p className="text-sm uppercase tracking-[0.28em] text-[var(--accent)]">ShopManager</p>
-          <h2 className="mt-4 max-w-md text-3xl font-semibold text-white">
+          <p className="text-sm uppercase tracking-[0.28em] text-[var(--accent-deep)]">ShopManager</p>
+          <h2 className="mt-4 max-w-md text-3xl font-semibold text-[var(--foreground)]">
             Keep every shop, order, customer, and report in one sharp workspace.
           </h2>
           <p className="mt-4 max-w-xl text-sm leading-6 text-[var(--ink-muted)]">
@@ -31,10 +31,10 @@ export default function Footer() {
         </div>
 
         <div>
-          <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-white/80">Product</h3>
+          <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-[var(--foreground)]">Product</h3>
           <div className="mt-4 flex flex-col gap-3">
             {productLinks.map((link) => (
-              <Link key={link.href} href={link.href} className="text-sm text-[var(--ink-muted)] transition hover:text-white">
+              <Link key={link.href} href={link.href} className="text-sm text-[var(--ink-muted)] transition hover:text-[var(--foreground)]">
                 {link.label}
               </Link>
             ))}
@@ -42,10 +42,10 @@ export default function Footer() {
         </div>
 
         <div>
-          <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-white/80">Support</h3>
+          <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-[var(--foreground)]">Support</h3>
           <div className="mt-4 flex flex-col gap-3">
             {supportLinks.map((link) => (
-              <Link key={link.href} href={link.href} className="text-sm text-[var(--ink-muted)] transition hover:text-white">
+              <Link key={link.href} href={link.href} className="text-sm text-[var(--ink-muted)] transition hover:text-[var(--foreground)]">
                 {link.label}
               </Link>
             ))}
@@ -53,7 +53,7 @@ export default function Footer() {
         </div>
       </div>
 
-      <div className="border-t border-white/10 px-4 py-5 text-center text-sm text-[var(--ink-muted)] sm:px-6 lg:px-8">
+      <div className="border-t border-[var(--border)] px-4 py-5 text-center text-sm text-[var(--ink-muted)] sm:px-6 lg:px-8">
         Copyright 2026 ShopManager. All rights reserved.
       </div>
     </footer>
