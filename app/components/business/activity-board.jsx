@@ -3,6 +3,20 @@
 import { useEffect, useState } from "react"
 import { useShopScope } from "./use-shop-scope"
 
+const EMPTY_ACTIVITY_DATA = {
+  metrics: {
+    shops_count: 0,
+    products_count: 0,
+    staff_count: 0,
+    bills_today: 0,
+    revenue_today: 0,
+    low_stock_count: 0,
+  },
+  activities: [],
+  latest_bills: [],
+  latest_stock_logs: [],
+}
+
 function currency(value) {
   return `â‚¹${Number(value ?? 0).toFixed(2)}`
 }
@@ -44,6 +58,10 @@ export default function ActivityBoard({ limit = 20, compact = false }) {
       return
     }
 
+    if (shops.length === 0) {
+      return
+    }
+
     async function loadData() {
       setLoading(true)
       setError("")
@@ -69,9 +87,9 @@ export default function ActivityBoard({ limit = 20, compact = false }) {
     }
 
     loadData()
-  }, [activeShopId, limit, loadingShops, selectedShopId, shopLocked])
+  }, [activeShopId, limit, loadingShops, selectedShopId, shopLocked, shops.length])
 
-  if (loadingShops || loading) {
+  if (loadingShops) {
     return <p className="text-sm text-[var(--ink-muted)]">Loading activity...</p>
   }
 
@@ -79,13 +97,23 @@ export default function ActivityBoard({ limit = 20, compact = false }) {
     return <p className="text-sm text-red-600">{shopError}</p>
   }
 
+  if (shops.length === 0) {
+    return <p className="text-sm text-[var(--ink-muted)]">No shop is available for activity yet. Add or assign a shop first.</p>
+  }
+
+  if (loading) {
+    return <p className="text-sm text-[var(--ink-muted)]">Loading activity...</p>
+  }
+
   if (error) {
     return <p className="text-sm text-red-600">{error}</p>
   }
 
-  const metrics = data?.metrics ?? {}
-  const activities = Array.isArray(data?.activities) ? data.activities : []
-  const latestBills = Array.isArray(data?.latest_bills) ? data.latest_bills.slice(0, compact ? 5 : 10) : []
+  const metrics = data?.metrics ?? EMPTY_ACTIVITY_DATA.metrics
+  const activities = Array.isArray(data?.activities) ? data.activities : EMPTY_ACTIVITY_DATA.activities
+  const latestBills = Array.isArray(data?.latest_bills)
+    ? data.latest_bills.slice(0, compact ? 5 : 10)
+    : EMPTY_ACTIVITY_DATA.latest_bills
 
   return (
     <section className="space-y-6">

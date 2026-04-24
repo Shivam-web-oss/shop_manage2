@@ -3,6 +3,7 @@ import { DENIED_STAFF_PERMISSIONS, mapPermissionsFromRow } from "./staff-permiss
 
 const SHOP_SELECT_FIELDS = "id, user_id, company_name, shop_name, location, description, created_at"
 const STAFF_ACCESS_FIELDS = "staff_user_id, business_owner_id, can_create_bill, can_update_stock, can_view_reports"
+const EMPTY_SCOPE_UUID = "00000000-0000-0000-0000-000000000000"
 
 const SHOP_ACCESS_TABLE_SETUP_MESSAGE =
   "Staff access or shop schema is missing. Make sure the business and staff_permissions tables match your Supabase schema."
@@ -196,7 +197,7 @@ export function serializeShopScope(scope) {
 
 export function applyShopScope(query, scope, columnName = "shop_id") {
   if (!scope?.scopedShopIds?.length) {
-    return query.eq(columnName, "__missing_shop_scope__")
+    return query.eq(columnName, EMPTY_SCOPE_UUID)
   }
 
   if (scope.scopedShopIds.length === 1) {

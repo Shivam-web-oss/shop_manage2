@@ -75,6 +75,25 @@ export async function GET(request) {
     return NextResponse.json({ message: "You don't have permission to view reports." }, { status: 403 })
   }
 
+  if (!scope.scopedShopIds.length) {
+    return NextResponse.json(
+      {
+        metrics: {
+          shops_count: 0,
+          products_count: 0,
+          staff_count: 0,
+          bills_today: 0,
+          revenue_today: 0,
+          low_stock_count: 0,
+        },
+        activities: [],
+        latest_bills: [],
+        latest_stock_logs: [],
+      },
+      { status: 200 }
+    )
+  }
+
   const requestUrl = new URL(request.url)
   const limit = Math.min(Math.max(Number.parseInt(requestUrl.searchParams.get("limit") ?? "20", 10) || 20, 1), 200)
   const dayStartIso = startOfToday()
