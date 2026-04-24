@@ -11,6 +11,8 @@ const MISSING_SCHEMA_ERROR_FRAGMENTS = [
 export const BILLING_SCHEMA_SETUP_MESSAGE =
   "Billing tables are not set up in Supabase yet. Run the latest billing SQL for this project, then redeploy the app."
 
+export const CUSTOMER_SELECT_FIELDS = "id, shop_id, name, email, phone"
+
 function getErrorText(error) {
   return [error?.message, error?.details, error?.hint]
     .filter(Boolean)
@@ -28,14 +30,11 @@ export function isMissingSchemaError(error) {
   return MISSING_SCHEMA_ERROR_FRAGMENTS.some((fragment) => errorText.includes(fragment))
 }
 
-export async function detectBillingSchema(supabase, scope) {
+export async function detectBillingSchema(supabase) {
   const modernChecks = await Promise.all([
-    applyShopScope(supabase.from("customers").select("id, shop_id"), scope).limit(1),
-    supabase
-      .from("orders")
-      .select("id, customer_id, total, status, created_at, updated_at, customers(id, shop_id)")
-      .limit(1),
-    supabase.from("order_items").select("id, order_id, product_id, quantity, price").limit(1),
+    supabase.from("customers").select("id").limit(1),
+    supabase.from("orders").select("id").limit(1),
+    supabase.from("order_items").select("id").limit(1),
   ])
 
   const modernErrors = modernChecks.map((result) => result.error).filter(Boolean)
@@ -54,8 +53,8 @@ export async function detectBillingSchema(supabase, scope) {
   }
 
   const legacyChecks = await Promise.all([
-    applyShopScope(supabase.from("bills").select("id, shop_id, total_amount, status, created_at"), scope).limit(1),
-    supabase.from("bill_items").select("id, bill_id, product_id, quantity, unit_price, total_price").limit(1),
+    supabase.from("bills").select("id").limit(1),
+    supabase.from("bill_items").select("id").limit(1),
   ])
 
   const legacyErrors = legacyChecks.map((result) => result.error).filter(Boolean)
@@ -81,8 +80,61 @@ export async function detectBillingSchema(supabase, scope) {
   }
 }
 
+export async function getScopedCustomerIds(supabase, scope) {
+  let query = supabase.from("customers").select("id, shop_id")
+  query = applyShopScope(query, scope)
+
+  const { data, error } = await query
+
+  if (error) {
+    return { ok: false, message: error.message, ids: [], error }
+  }
+
+  return {
+    ok: true,
+    message: null,
+    ids: (data ?? []).map((customer) => customer.id).filter(Boolean),
+  }
+}
+
+export async function getCustomersByIds(supabase, scope, customerIds) {
+  const normalizedIds = [...new Set((customerIds ?? []).filter(Boolean))]
+  if (!normalizedIds.length) {
+    return {
+      ok: true,
+      message: null,
+      customers: [],
+      customerMap: new Map(),
+    }
+  }
+
+  let query = supabase.from("customers").select(CUSTOMER_SELECT_FIELDS).in("id", normalizedIds)
+  query = applyShopScope(query, scope)
+
+  const { data, error } = await query
+
+  if (error) {
+    return {
+      ok: false,
+      message: error.message,
+      customers: [],
+      customerMap: new Map(),
+      error,
+    }
+  }
+
+  const customers = data ?? []
+
+  return {
+    ok: true,
+    message: null,
+    customers,
+    customerMap: new Map(customers.map((customer) => [customer.id, customer])),
+  }
+}
+
 export function mapOrderRow(order) {
-  const customer = order?.customers ?? null
+  const customer = order?.customer ?? order?.customers ?? null
   const totalAmount = Number(order?.total ?? 0)
 
   return {
@@ -106,11 +158,11 @@ export function mapOrderRow(order) {
 export function mapLegacyBillRow(bill) {
   return {
     id: bill?.id ?? null,
-    shop_id: bill?.shop_id ?? null,
+    shop_id: bill?.shop_id ?? bill?.business_id ?? null,
     customer_id: null,
     customer_name: bill?.customer_name ?? "Walk-in",
     customer_phone: bill?.customer_phone ?? null,
-    subtotal: Number(bill?.subtotal ?? 0),
+    subtotal: Number(bill?.subtotal ?? bill?.total_amount ?? 0),
     discount_percent: Number(bill?.discount_percent ?? 0),
     discount_amount: Number(bill?.discount_amount ?? 0),
     gst_amount: Number(bill?.gst_amount ?? 0),
@@ -118,6 +170,6 @@ export function mapLegacyBillRow(bill) {
     payment_method: bill?.payment_method ?? null,
     status: bill?.status ?? "paid",
     created_at: bill?.created_at ?? null,
-    updated_at: bill?.created_at ?? null,
+    updated_at: bill?.updated_at ?? bill?.created_at ?? null,
   }
 }

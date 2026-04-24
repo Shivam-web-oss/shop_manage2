@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server"
 import { getApiAuthContext, hasAnyRole } from "@/lib/api-auth"
 import { ROLES } from "@/lib/authz"
-import { detectBillingSchema, isMissingSchemaError, mapLegacyBillRow, mapOrderRow } from "@/lib/billing-storage"
+import {
+  detectBillingSchema,
+  getCustomersByIds,
+  getScopedCustomerIds,
+  isMissingSchemaError,
+  mapLegacyBillRow,
+  mapOrderRow,
+} from "@/lib/billing-storage"
 import { applyShopScope, getShopIdFromRequest, resolveShopScope } from "@/lib/shop-access"
 
-const ORDER_ACTIVITY_SELECT_FIELDS = "id, total, created_at, updated_at, status, customer_id, customers(id, shop_id, name, phone)"
-const LEGACY_BILL_ACTIVITY_SELECT_FIELDS =
-  "id, shop_id, customer_name, customer_phone, subtotal, discount_percent, discount_amount, gst_amount, total_amount, payment_method, status, created_at"
+const ORDER_ACTIVITY_SELECT_FIELDS = "id, total, created_at, updated_at, status, customer_id"
+const LEGACY_BILL_ACTIVITY_SELECT_FIELDS = "*"
 
 function startOfToday() {
   const date = new Date()
@@ -32,23 +38,6 @@ function getSchemaAwareMessage(error) {
   return isMissingSchemaError(error)
     ? "Billing data is not fully set up in Supabase yet. Run the latest billing SQL for this project and redeploy."
     : error?.message ?? "Unable to load dashboard activity."
-}
-
-async function getScopedCustomerIds(supabase, scope) {
-  let query = supabase.from("customers").select("id, shop_id")
-  query = applyShopScope(query, scope)
-
-  const { data, error } = await query
-
-  if (error) {
-    return { ok: false, message: error.message, ids: [], error }
-  }
-
-  return {
-    ok: true,
-    message: null,
-    ids: (data ?? []).map((customer) => customer.id).filter(Boolean),
-  }
 }
 
 function buildBillActivities(bills, schema) {
@@ -101,20 +90,24 @@ export async function GET(request) {
   )
 
   let salesPromise
+  let customersPromise = Promise.resolve({ ok: true, customerMap: new Map(), customers: [], message: null, error: null })
   if (billingSchemaResult.schema === "modern") {
     const customerIdsResult = await getScopedCustomerIds(context.supabase, scope)
     if (!customerIdsResult.ok) {
       return NextResponse.json({ message: getSchemaAwareMessage(customerIdsResult.error) }, { status: 400 })
     }
 
-    salesPromise = customerIdsResult.ids.length
-      ? context.supabase
+    if (!customerIdsResult.ids.length) {
+      salesPromise = Promise.resolve({ data: [], error: null, count: 0 })
+    } else {
+      salesPromise = context.supabase
           .from("orders")
           .select(ORDER_ACTIVITY_SELECT_FIELDS, { count: "exact" })
           .in("customer_id", customerIdsResult.ids)
           .order("created_at", { ascending: false })
           .limit(limit)
-      : Promise.resolve({ data: [], error: null, count: 0 })
+      customersPromise = getCustomersByIds(context.supabase, scope, customerIdsResult.ids)
+    }
   } else {
     salesPromise = applyShopScope(
       context.supabase.from("bills").select(LEGACY_BILL_ACTIVITY_SELECT_FIELDS, { count: "exact" }),
@@ -124,13 +117,16 @@ export async function GET(request) {
       .limit(limit)
   }
 
-  const [productsResult, salesResult] = await Promise.all([productsQuery, salesPromise])
+  const [productsResult, salesResult, customersResult] = await Promise.all([productsQuery, salesPromise, customersPromise])
 
   if (productsResult.error) {
     return NextResponse.json({ message: productsResult.error.message }, { status: 400 })
   }
   if (salesResult.error) {
     return NextResponse.json({ message: getSchemaAwareMessage(salesResult.error) }, { status: 400 })
+  }
+  if (!customersResult.ok) {
+    return NextResponse.json({ message: getSchemaAwareMessage(customersResult.error) }, { status: 400 })
   }
 
   let staffCount = 0
@@ -145,7 +141,12 @@ export async function GET(request) {
 
   const mappedSales =
     billingSchemaResult.schema === "modern"
-      ? (salesResult.data ?? []).map(mapOrderRow)
+      ? (salesResult.data ?? []).map((order) =>
+          mapOrderRow({
+            ...order,
+            customer: customersResult.customerMap.get(order.customer_id) ?? null,
+          })
+        )
       : (salesResult.data ?? []).map(mapLegacyBillRow)
 
   const salesToday = mappedSales.filter((bill) => (bill.created_at ?? "") >= dayStartIso)

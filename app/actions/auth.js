@@ -1,6 +1,6 @@
 'use server'
 
-import { redirect } from 'next/navigation'
+import { redirect, unstable_rethrow } from 'next/navigation'
 import { createClient } from '../src/lib/supabase/server'
 import { normalizeRole, ROLES } from '@/lib/authz'
 
@@ -68,6 +68,7 @@ export async function loginAction(_state, formData) {
 
     redirect(business ? '/business' : '/business/create')
   } catch (error) {
+    unstable_rethrow(error)
     console.error('Login action crashed.', error)
     return {
       error: error instanceof Error ? error.message : 'Unable to login right now.',

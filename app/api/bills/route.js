@@ -5,6 +5,8 @@ import { calculateBillTotals, normalizeCartItem } from "@/lib/billing"
 import {
   BILLING_SCHEMA_SETUP_MESSAGE,
   detectBillingSchema,
+  getCustomersByIds,
+  getScopedCustomerIds,
   isMissingSchemaError,
   mapLegacyBillRow,
   mapOrderRow,
@@ -12,11 +14,9 @@ import {
 import { decrementStock } from "@/lib/products"
 import { applyShopScope, getShopIdFromRequest, normalizeRequestedShopId, resolveShopScope } from "@/lib/shop-access"
 
-const ORDER_LIST_SELECT_FIELDS =
-  "id, user_id, total, created_at, updated_at, status, customer_id, customers(id, shop_id, name, email, phone)"
+const ORDER_LIST_SELECT_FIELDS = "id, user_id, total, created_at, updated_at, status, customer_id"
 const ORDER_MUTATION_SELECT_FIELDS = "id, user_id, total, created_at, updated_at, status, customer_id"
-const LEGACY_BILL_SELECT_FIELDS =
-  "id, shop_id, customer_name, customer_phone, subtotal, discount_percent, discount_amount, gst_amount, total_amount, payment_method, status, created_at"
+const LEGACY_BILL_SELECT_FIELDS = "*"
 
 async function fetchProductsByIds(supabase, productIds, scope) {
   let query = supabase
@@ -33,23 +33,6 @@ async function fetchProductsByIds(supabase, productIds, scope) {
   }
 
   return { ok: true, message: null, data: data ?? [] }
-}
-
-async function getScopedCustomerIds(supabase, scope) {
-  let query = supabase.from("customers").select("id, shop_id")
-  query = applyShopScope(query, scope)
-
-  const { data, error } = await query
-
-  if (error) {
-    return { ok: false, message: error.message, ids: [], error }
-  }
-
-  return {
-    ok: true,
-    message: null,
-    ids: (data ?? []).map((customer) => customer.id).filter(Boolean),
-  }
 }
 
 async function findOrCreateCustomer(supabase, scope, payload) {
@@ -153,6 +136,75 @@ async function listLegacyBills(supabase, scope, { limit, fromDate, toDate }) {
   return { ok: true, message: null, status: 200, bills: (data ?? []).map(mapLegacyBillRow) }
 }
 
+async function listModernBills(supabase, scope, { limit, fromDate, toDate }) {
+  const customerIdsResult = await getScopedCustomerIds(supabase, scope)
+  if (!customerIdsResult.ok) {
+    return {
+      ok: false,
+      message: getSchemaAwareMessage(customerIdsResult.error, customerIdsResult.message),
+      status: getSchemaAwareStatus(customerIdsResult.error),
+      bills: [],
+    }
+  }
+
+  if (!customerIdsResult.ids.length) {
+    return { ok: true, message: null, status: 200, bills: [] }
+  }
+
+  let query = supabase
+    .from("orders")
+    .select(ORDER_LIST_SELECT_FIELDS)
+    .in("customer_id", customerIdsResult.ids)
+    .order("created_at", { ascending: false })
+    .limit(limit)
+
+  if (fromDate) {
+    query = query.gte("created_at", fromDate)
+  }
+
+  if (toDate) {
+    query = query.lte("created_at", toDate)
+  }
+
+  const { data, error } = await query
+  if (error) {
+    return {
+      ok: false,
+      message: getSchemaAwareMessage(error),
+      status: getSchemaAwareStatus(error),
+      bills: [],
+    }
+  }
+
+  const orders = data ?? []
+  const customersResult = await getCustomersByIds(
+    supabase,
+    scope,
+    orders.map((order) => order.customer_id)
+  )
+
+  if (!customersResult.ok) {
+    return {
+      ok: false,
+      message: getSchemaAwareMessage(customersResult.error, customersResult.message),
+      status: getSchemaAwareStatus(customersResult.error),
+      bills: [],
+    }
+  }
+
+  return {
+    ok: true,
+    message: null,
+    status: 200,
+    bills: orders.map((order) =>
+      mapOrderRow({
+        ...order,
+        customer: customersResult.customerMap.get(order.customer_id) ?? null,
+      })
+    ),
+  }
+}
+
 async function createLegacyBill(supabase, scope, payload, items, totals) {
   const paymentMethod = String(payload.payment_method ?? "cash").trim().toLowerCase() || "cash"
   const status = String(payload.status ?? "paid").trim().toLowerCase() || "paid"
@@ -249,39 +301,12 @@ export async function GET(request) {
     return NextResponse.json({ bills: legacyBillsResult.bills }, { status: 200 })
   }
 
-  const customerIdsResult = await getScopedCustomerIds(context.supabase, scope)
-  if (!customerIdsResult.ok) {
-    return NextResponse.json(
-      { message: getSchemaAwareMessage(customerIdsResult.error, customerIdsResult.message) },
-      { status: getSchemaAwareStatus(customerIdsResult.error) }
-    )
+  const modernBillsResult = await listModernBills(context.supabase, scope, { limit, fromDate, toDate })
+  if (!modernBillsResult.ok) {
+    return NextResponse.json({ message: modernBillsResult.message }, { status: modernBillsResult.status })
   }
 
-  if (!customerIdsResult.ids.length) {
-    return NextResponse.json({ bills: [] }, { status: 200 })
-  }
-
-  let query = context.supabase
-    .from("orders")
-    .select(ORDER_LIST_SELECT_FIELDS)
-    .in("customer_id", customerIdsResult.ids)
-    .order("created_at", { ascending: false })
-    .limit(limit)
-
-  if (fromDate) {
-    query = query.gte("created_at", fromDate)
-  }
-
-  if (toDate) {
-    query = query.lte("created_at", toDate)
-  }
-
-  const { data, error } = await query
-  if (error) {
-    return NextResponse.json({ message: getSchemaAwareMessage(error) }, { status: getSchemaAwareStatus(error) })
-  }
-
-  return NextResponse.json({ bills: (data ?? []).map(mapOrderRow) }, { status: 200 })
+  return NextResponse.json({ bills: modernBillsResult.bills }, { status: 200 })
 }
 
 export async function POST(request) {
@@ -375,16 +400,22 @@ export async function POST(request) {
       )
     }
 
+    const normalizedOrderStatus = String(body.status ?? "").trim().toLowerCase()
+    const orderPayload = {
+      user_id: context.user.id,
+      total: totals.total_amount,
+      customer_id: customerResult.customer.id,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+
+    if (normalizedOrderStatus) {
+      orderPayload.status = normalizedOrderStatus
+    }
+
     const { data: order, error: orderError } = await context.supabase
       .from("orders")
-      .insert({
-        user_id: context.user.id,
-        total: totals.total_amount,
-        status: String(body.status ?? "paid").trim() || "paid",
-        customer_id: customerResult.customer.id,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
+      .insert(orderPayload)
       .select(ORDER_MUTATION_SELECT_FIELDS)
       .single()
 
@@ -413,7 +444,7 @@ export async function POST(request) {
     savedBill = {
       ...mapOrderRow({
         ...order,
-        customers: customerResult.customer,
+        customer: customerResult.customer,
       }),
       payment_method: String(body.payment_method ?? "").trim() || null,
       items: buildBillItemsPayload(items),
