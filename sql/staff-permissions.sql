@@ -5,6 +5,7 @@ create table if not exists public.staff_permissions (
   id uuid primary key default gen_random_uuid(),
   staff_user_id uuid not null unique references public.profiles(id) on delete cascade,
   business_owner_id uuid not null references public.profiles(id) on delete cascade,
+  assigned_shop_id uuid references public.business(id) on delete set null,
   can_create_bill boolean not null default true,
   can_update_stock boolean not null default true,
   can_view_reports boolean not null default true,
@@ -14,3 +15,4 @@ create table if not exists public.staff_permissions (
 
 create index if not exists idx_staff_permissions_owner on public.staff_permissions (business_owner_id);
 create index if not exists idx_staff_permissions_staff on public.staff_permissions (staff_user_id);
+create index if not exists idx_staff_permissions_assigned_shop on public.staff_permissions (assigned_shop_id);

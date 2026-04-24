@@ -3,18 +3,21 @@ import { getApiAuthContext, hasAnyRole } from "@/lib/api-auth"
 import { ROLES } from "@/lib/authz"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { normalizeStaffPermissions } from "@/lib/staff-permissions"
+import { findOwnedShop, listOwnedShops, normalizeRequestedShopId } from "@/lib/shop-access"
 
 const TABLE_SETUP_MESSAGE =
-  "Staff access table is missing. Run the SQL in sql/staff-permissions.sql and try again."
+  "Staff access table is missing. Run the SQL in sql/staff-permissions.sql and sql/add-shop-scope.sql and try again."
 
 async function readStaffAccessRows(adminClient, businessOwnerId) {
   const { data, error } = await adminClient
     .from("staff_permissions")
-    .select("id, staff_user_id, business_owner_id, can_create_bill, can_update_stock, can_view_reports, created_at, updated_at")
+    .select(
+      "id, staff_user_id, business_owner_id, assigned_shop_id, can_create_bill, can_update_stock, can_view_reports, created_at, updated_at"
+    )
     .eq("business_owner_id", businessOwnerId)
     .order("created_at", { ascending: false })
 
-  if (error?.code === "42P01") {
+  if (error?.code === "42P01" || error?.code === "42703") {
     return { ok: false, status: 500, message: TABLE_SETUP_MESSAGE, data: [] }
   }
 
@@ -23,6 +26,34 @@ async function readStaffAccessRows(adminClient, businessOwnerId) {
   }
 
   return { ok: true, status: 200, message: null, data: data ?? [] }
+}
+
+async function resolveAssignedShop(adminClient, businessOwnerId, requestedShopId) {
+  const normalizedShopId = normalizeRequestedShopId(requestedShopId)
+
+  if (normalizedShopId) {
+    const ownedShop = await findOwnedShop(adminClient, businessOwnerId, normalizedShopId)
+    if (!ownedShop.ok) {
+      return { ok: false, status: ownedShop.status, message: "Assigned shop is invalid.", shop: null }
+    }
+
+    return { ok: true, status: 200, message: null, shop: ownedShop.shop }
+  }
+
+  const ownedShops = await listOwnedShops(adminClient, businessOwnerId)
+  if (!ownedShops.ok) {
+    return { ok: false, status: ownedShops.status, message: ownedShops.message, shop: null }
+  }
+
+  if (!ownedShops.shops.length) {
+    return { ok: false, status: 400, message: "Create a shop before adding staff users.", shop: null }
+  }
+
+  if (ownedShops.shops.length > 1) {
+    return { ok: false, status: 400, message: "Assign a shop to the staff account.", shop: null }
+  }
+
+  return { ok: true, status: 200, message: null, shop: ownedShops.shops[0] }
 }
 
 export async function GET() {
@@ -52,6 +83,7 @@ export async function GET() {
     return NextResponse.json({ staff: [] }, { status: 200 })
   }
 
+  const assignedShopIds = [...new Set(staffAccess.data.map((row) => row.assigned_shop_id).filter(Boolean))]
   const { data: profiles, error: profilesError } = await adminClient
     .from("profiles")
     .select("id, full_name, email, role")
@@ -59,6 +91,21 @@ export async function GET() {
 
   if (profilesError) {
     return NextResponse.json({ message: profilesError.message }, { status: 400 })
+  }
+
+  let shopMap = new Map()
+  if (assignedShopIds.length) {
+    const { data: shops, error: shopsError } = await adminClient
+      .from("business")
+      .select("id, shop_name")
+      .eq("user_id", context.user.id)
+      .in("id", assignedShopIds)
+
+    if (shopsError) {
+      return NextResponse.json({ message: shopsError.message }, { status: 400 })
+    }
+
+    shopMap = new Map((shops ?? []).map((shop) => [shop.id, shop]))
   }
 
   const profileMap = new Map((profiles ?? []).map((profile) => [profile.id, profile]))
@@ -77,6 +124,8 @@ export async function GET() {
           can_update_stock: row.can_update_stock,
           can_view_reports: row.can_view_reports,
         },
+        assigned_shop_id: row.assigned_shop_id ?? null,
+        assigned_shop_name: shopMap.get(row.assigned_shop_id)?.shop_name ?? null,
         created_at: row.created_at,
         updated_at: row.updated_at,
       }
@@ -107,6 +156,7 @@ export async function POST(request) {
   const email = String(body.email ?? "").trim().toLowerCase()
   const password = String(body.password ?? "")
   const permissions = normalizeStaffPermissions(body.permissions ?? {})
+  const requestedShopId = normalizeRequestedShopId(body.assigned_shop_id, body.assignedShopId)
 
   if (!fullName || !email || !password) {
     return NextResponse.json({ message: "Name, email, and password are required." }, { status: 400 })
@@ -125,6 +175,11 @@ export async function POST(request) {
   const existingAccess = await readStaffAccessRows(adminClient, context.user.id)
   if (!existingAccess.ok) {
     return NextResponse.json({ message: existingAccess.message }, { status: existingAccess.status })
+  }
+
+  const assignedShop = await resolveAssignedShop(adminClient, context.user.id, requestedShopId)
+  if (!assignedShop.ok) {
+    return NextResponse.json({ message: assignedShop.message }, { status: assignedShop.status })
   }
 
   const { data: createdUserData, error: createUserError } = await adminClient.auth.admin.createUser({
@@ -181,6 +236,7 @@ export async function POST(request) {
     {
       staff_user_id: staffUserId,
       business_owner_id: context.user.id,
+      assigned_shop_id: assignedShop.shop.id,
       ...permissions,
       updated_at: new Date().toISOString(),
     },
@@ -206,6 +262,8 @@ export async function POST(request) {
         email,
         role: ROLES.STAFF,
         permissions,
+        assigned_shop_id: assignedShop.shop.id,
+        assigned_shop_name: assignedShop.shop.shop_name,
       },
     },
     { status: 201 }

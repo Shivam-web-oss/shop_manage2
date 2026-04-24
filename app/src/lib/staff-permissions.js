@@ -4,6 +4,12 @@ export const DEFAULT_STAFF_PERMISSIONS = Object.freeze({
   can_view_reports: true,
 })
 
+export const DENIED_STAFF_PERMISSIONS = Object.freeze({
+  can_create_bill: false,
+  can_update_stock: false,
+  can_view_reports: false,
+})
+
 export function normalizeStaffPermissions(payload = {}) {
   return {
     can_create_bill: payload.can_create_bill !== false,
@@ -12,9 +18,9 @@ export function normalizeStaffPermissions(payload = {}) {
   }
 }
 
-export function mapPermissionsFromRow(row) {
+export function mapPermissionsFromRow(row, fallback = DENIED_STAFF_PERMISSIONS) {
   if (!row || typeof row !== "object") {
-    return { ...DEFAULT_STAFF_PERMISSIONS }
+    return { ...fallback }
   }
 
   return normalizeStaffPermissions({

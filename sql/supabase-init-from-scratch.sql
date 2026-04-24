@@ -27,6 +27,7 @@ create table if not exists public.staff_permissions (
   id uuid primary key default gen_random_uuid(),
   staff_user_id uuid not null unique references public.profiles(id) on delete cascade,
   business_owner_id uuid not null references public.profiles(id) on delete cascade,
+  assigned_shop_id uuid,
   can_create_bill boolean not null default true,
   can_update_stock boolean not null default true,
   can_view_reports boolean not null default true,
@@ -37,6 +38,7 @@ create table if not exists public.staff_permissions (
 
 create index if not exists idx_staff_permissions_owner on public.staff_permissions (business_owner_id);
 create index if not exists idx_staff_permissions_staff on public.staff_permissions (staff_user_id);
+create index if not exists idx_staff_permissions_assigned_shop on public.staff_permissions (assigned_shop_id);
 
 -- ------------------------------------------------------------
 -- Helper auth/permission functions
@@ -107,6 +109,54 @@ begin
 end;
 $$;
 
+create or replace function public.current_staff_shop_id()
+returns uuid
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  uid uuid := auth.uid();
+  owner_id uuid := public.current_business_owner_id();
+  assigned_id uuid;
+  fallback_id uuid;
+  owned_shop_count integer := 0;
+begin
+  if uid is null or public.current_user_role() <> 'staff' then
+    return null;
+  end if;
+
+  select sp.assigned_shop_id
+  into assigned_id
+  from public.staff_permissions sp
+  where sp.staff_user_id = uid
+  limit 1;
+
+  if assigned_id is not null then
+    return assigned_id;
+  end if;
+
+  select count(*)
+  into owned_shop_count
+  from public.business b
+  where b.user_id = owner_id;
+
+  if owned_shop_count = 1 then
+    select b.id
+    into fallback_id
+    from public.business b
+    where b.user_id = owner_id
+    order by b.created_at asc, b.id asc
+    limit 1;
+
+    return fallback_id;
+  end if;
+
+  return null;
+end;
+$$;
+
 create or replace function public.staff_can_create_bill()
 returns boolean
 language sql
@@ -148,6 +198,7 @@ $$;
 
 grant execute on function public.current_user_role() to authenticated;
 grant execute on function public.current_business_owner_id() to authenticated;
+grant execute on function public.current_staff_shop_id() to authenticated;
 grant execute on function public.staff_can_create_bill() to authenticated;
 grant execute on function public.staff_can_update_stock() to authenticated;
 grant execute on function public.staff_can_view_reports() to authenticated;
@@ -168,9 +219,17 @@ create table if not exists public.business (
 
 create index if not exists idx_business_user_id on public.business (user_id);
 
+alter table if exists public.staff_permissions
+  drop constraint if exists staff_permissions_assigned_shop_id_fkey;
+
+alter table if exists public.staff_permissions
+  add constraint staff_permissions_assigned_shop_id_fkey
+  foreign key (assigned_shop_id) references public.business(id) on delete set null;
+
 create table if not exists public.products (
   id uuid primary key default gen_random_uuid(),
   business_owner_id uuid not null default public.current_business_owner_id() references public.profiles(id) on delete cascade,
+  shop_id uuid not null references public.business(id) on delete cascade,
   name text not null,
   sku text,
   category text,
@@ -181,15 +240,17 @@ create table if not exists public.products (
   updated_at timestamptz not null default now()
 );
 
-create unique index if not exists idx_products_owner_sku_unique
-  on public.products (business_owner_id, sku)
+create unique index if not exists idx_products_shop_sku_unique
+  on public.products (shop_id, sku)
   where sku is not null and btrim(sku) <> '';
 
 create index if not exists idx_products_owner on public.products (business_owner_id);
+create index if not exists idx_products_shop on public.products (shop_id);
 
 create table if not exists public.stock_logs (
   id uuid primary key default gen_random_uuid(),
   business_owner_id uuid not null default public.current_business_owner_id() references public.profiles(id) on delete cascade,
+  shop_id uuid not null references public.business(id) on delete cascade,
   product_id uuid references public.products(id) on delete set null,
   quantity_added integer not null,
   note text,
@@ -197,11 +258,13 @@ create table if not exists public.stock_logs (
 );
 
 create index if not exists idx_stock_logs_owner on public.stock_logs (business_owner_id);
+create index if not exists idx_stock_logs_shop on public.stock_logs (shop_id);
 create index if not exists idx_stock_logs_product on public.stock_logs (product_id);
 
 create table if not exists public.bills (
   id uuid primary key default gen_random_uuid(),
   business_owner_id uuid not null default public.current_business_owner_id() references public.profiles(id) on delete cascade,
+  shop_id uuid not null references public.business(id) on delete cascade,
   created_by uuid default auth.uid() references public.profiles(id) on delete set null,
   customer_name text default 'Walk-in',
   customer_phone text,
@@ -216,6 +279,7 @@ create table if not exists public.bills (
 );
 
 create index if not exists idx_bills_owner_created_at on public.bills (business_owner_id, created_at desc);
+create index if not exists idx_bills_shop_created_at on public.bills (shop_id, created_at desc);
 
 create table if not exists public.bill_items (
   id uuid primary key default gen_random_uuid(),
@@ -493,6 +557,10 @@ to authenticated
 using (
   public.current_user_role() = 'admin'
   or user_id = auth.uid()
+  or (
+    public.current_user_role() = 'staff'
+    and id = public.current_staff_shop_id()
+  )
 );
 
 drop policy if exists "business_insert" on public.business;
@@ -537,10 +605,20 @@ for select
 to authenticated
 using (
   public.current_user_role() = 'admin'
-  or business_owner_id = auth.uid()
+  or (
+    public.current_user_role() = 'business'
+    and business_owner_id = auth.uid()
+    and exists (
+      select 1
+      from public.business b
+      where b.id = products.shop_id
+        and b.user_id = auth.uid()
+    )
+  )
   or (
     public.current_user_role() = 'staff'
     and business_owner_id = public.current_business_owner_id()
+    and shop_id = public.current_staff_shop_id()
   )
 );
 
@@ -554,6 +632,12 @@ with check (
   or (
     public.current_user_role() = 'business'
     and business_owner_id = auth.uid()
+    and exists (
+      select 1
+      from public.business b
+      where b.id = products.shop_id
+        and b.user_id = auth.uid()
+    )
   )
 );
 
@@ -567,11 +651,18 @@ using (
   or (
     public.current_user_role() = 'business'
     and business_owner_id = auth.uid()
+    and exists (
+      select 1
+      from public.business b
+      where b.id = products.shop_id
+        and b.user_id = auth.uid()
+    )
   )
   or (
     public.current_user_role() = 'staff'
     and public.staff_can_update_stock()
     and business_owner_id = public.current_business_owner_id()
+    and shop_id = public.current_staff_shop_id()
   )
 )
 with check (
@@ -579,11 +670,18 @@ with check (
   or (
     public.current_user_role() = 'business'
     and business_owner_id = auth.uid()
+    and exists (
+      select 1
+      from public.business b
+      where b.id = products.shop_id
+        and b.user_id = auth.uid()
+    )
   )
   or (
     public.current_user_role() = 'staff'
     and public.staff_can_update_stock()
     and business_owner_id = public.current_business_owner_id()
+    and shop_id = public.current_staff_shop_id()
   )
 );
 
@@ -597,6 +695,12 @@ using (
   or (
     public.current_user_role() = 'business'
     and business_owner_id = auth.uid()
+    and exists (
+      select 1
+      from public.business b
+      where b.id = products.shop_id
+        and b.user_id = auth.uid()
+    )
   )
 );
 
@@ -608,11 +712,21 @@ for select
 to authenticated
 using (
   public.current_user_role() = 'admin'
-  or business_owner_id = auth.uid()
+  or (
+    public.current_user_role() = 'business'
+    and business_owner_id = auth.uid()
+    and exists (
+      select 1
+      from public.business b
+      where b.id = stock_logs.shop_id
+        and b.user_id = auth.uid()
+    )
+  )
   or (
     public.current_user_role() = 'staff'
     and public.staff_can_view_reports()
     and business_owner_id = public.current_business_owner_id()
+    and shop_id = public.current_staff_shop_id()
   )
 );
 
@@ -626,11 +740,18 @@ with check (
   or (
     public.current_user_role() = 'business'
     and business_owner_id = auth.uid()
+    and exists (
+      select 1
+      from public.business b
+      where b.id = stock_logs.shop_id
+        and b.user_id = auth.uid()
+    )
   )
   or (
     public.current_user_role() = 'staff'
     and public.staff_can_update_stock()
     and business_owner_id = public.current_business_owner_id()
+    and shop_id = public.current_staff_shop_id()
   )
 );
 
@@ -642,11 +763,21 @@ for select
 to authenticated
 using (
   public.current_user_role() = 'admin'
-  or business_owner_id = auth.uid()
+  or (
+    public.current_user_role() = 'business'
+    and business_owner_id = auth.uid()
+    and exists (
+      select 1
+      from public.business b
+      where b.id = bills.shop_id
+        and b.user_id = auth.uid()
+    )
+  )
   or (
     public.current_user_role() = 'staff'
     and public.staff_can_view_reports()
     and business_owner_id = public.current_business_owner_id()
+    and shop_id = public.current_staff_shop_id()
   )
 );
 
@@ -660,11 +791,18 @@ with check (
   or (
     public.current_user_role() = 'business'
     and business_owner_id = auth.uid()
+    and exists (
+      select 1
+      from public.business b
+      where b.id = bills.shop_id
+        and b.user_id = auth.uid()
+    )
   )
   or (
     public.current_user_role() = 'staff'
     and public.staff_can_create_bill()
     and business_owner_id = public.current_business_owner_id()
+    and shop_id = public.current_staff_shop_id()
   )
 );
 
@@ -681,11 +819,21 @@ using (
     where b.id = bill_items.bill_id
       and (
         public.current_user_role() = 'admin'
-        or b.business_owner_id = auth.uid()
+        or (
+          public.current_user_role() = 'business'
+          and b.business_owner_id = auth.uid()
+          and exists (
+            select 1
+            from public.business business_row
+            where business_row.id = b.shop_id
+              and business_row.user_id = auth.uid()
+          )
+        )
         or (
           public.current_user_role() = 'staff'
           and public.staff_can_view_reports()
           and b.business_owner_id = public.current_business_owner_id()
+          and b.shop_id = public.current_staff_shop_id()
         )
       )
   )
@@ -703,11 +851,21 @@ with check (
     where b.id = bill_items.bill_id
       and (
         public.current_user_role() = 'admin'
-        or b.business_owner_id = auth.uid()
+        or (
+          public.current_user_role() = 'business'
+          and b.business_owner_id = auth.uid()
+          and exists (
+            select 1
+            from public.business business_row
+            where business_row.id = b.shop_id
+              and business_row.user_id = auth.uid()
+          )
+        )
         or (
           public.current_user_role() = 'staff'
           and public.staff_can_create_bill()
           and b.business_owner_id = public.current_business_owner_id()
+          and b.shop_id = public.current_staff_shop_id()
         )
       )
   )

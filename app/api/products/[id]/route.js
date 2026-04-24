@@ -7,14 +7,32 @@ import {
   normalizeProductPayload,
   toPositiveInteger,
 } from "@/lib/products"
-import { DEFAULT_STAFF_PERMISSIONS, mapPermissionsFromRow } from "@/lib/staff-permissions"
+import { applyShopScope, resolveShopScope } from "@/lib/shop-access"
 
-async function getProductById(supabase, productId) {
-  const { data, error } = await supabase
+const PRODUCT_SELECT_FIELDS = "id, shop_id, name, sku, category, price, stock, quantity, unit, created_at, updated_at"
+
+function mapProductRow(row) {
+  const normalizedQuantity = Number(row?.quantity ?? row?.stock ?? 0)
+
+  return {
+    ...row,
+    stock: normalizedQuantity,
+    quantity: normalizedQuantity,
+    unit: row?.unit ?? "pcs",
+  }
+}
+
+async function getProductById(supabase, productId, scope) {
+  let query = supabase
     .from("products")
-    .select("id, name, sku, category, price, quantity, unit, created_at, updated_at")
+    .select(PRODUCT_SELECT_FIELDS)
     .eq("id", productId)
-    .maybeSingle()
+
+  if (scope) {
+    query = applyShopScope(query, scope)
+  }
+
+  const { data, error } = await query.maybeSingle()
 
   if (error) {
     return { ok: false, status: 400, message: error.message, data: null }
@@ -24,24 +42,7 @@ async function getProductById(supabase, productId) {
     return { ok: false, status: 404, message: "Product not found.", data: null }
   }
 
-  return { ok: true, status: 200, message: null, data }
-}
-
-async function getStaffPermissions(supabase, staffUserId) {
-  const { data, error } = await supabase
-    .from("staff_permissions")
-    .select("can_create_bill, can_update_stock, can_view_reports")
-    .eq("staff_user_id", staffUserId)
-    .maybeSingle()
-
-  if (error) {
-    if (error.code === "42P01") {
-      return { ...DEFAULT_STAFF_PERMISSIONS }
-    }
-    return { ...DEFAULT_STAFF_PERMISSIONS }
-  }
-
-  return mapPermissionsFromRow(data)
+  return { ok: true, status: 200, message: null, data: mapProductRow(data) }
 }
 
 function normalizeProductPatch(body = {}) {
@@ -70,13 +71,10 @@ function normalizeProductPatch(body = {}) {
   return patch
 }
 
-async function logStockChange(supabase, productId, quantityAdded, note) {
-  await supabase.from("stock_logs").insert({
-    product_id: productId,
-    quantity_added: quantityAdded,
-    note,
+async function logStockChange(supabase, scope, productId, quantityAdded, note) {
+  await supabase.from("products").update({
     updated_at: new Date().toISOString(),
-  })
+  }).eq("id", productId).eq("shop_id", scope.shopId)
 }
 
 export async function PATCH(request, { params }) {
@@ -96,6 +94,11 @@ export async function PATCH(request, { params }) {
     return NextResponse.json({ message: "Product id is required." }, { status: 400 })
   }
 
+  const scope = await resolveShopScope(context)
+  if (!scope.ok) {
+    return NextResponse.json({ message: scope.message }, { status: scope.status })
+  }
+
   let body
   try {
     body = await request.json()
@@ -103,14 +106,13 @@ export async function PATCH(request, { params }) {
     return NextResponse.json({ message: "Invalid request payload." }, { status: 400 })
   }
 
-  const existing = await getProductById(context.supabase, productId)
+  const existing = await getProductById(context.supabase, productId, scope)
   if (!existing.ok) {
     return NextResponse.json({ message: existing.message }, { status: existing.status })
   }
 
   if (context.role === ROLES.STAFF) {
-    const permissions = await getStaffPermissions(context.supabase, context.user.id)
-    if (!permissions.can_update_stock) {
+    if (!scope.permissions.can_update_stock) {
       return NextResponse.json({ message: "You don't have permission to update stock." }, { status: 403 })
     }
 
@@ -130,12 +132,16 @@ export async function PATCH(request, { params }) {
 
     await logStockChange(
       context.supabase,
+      {
+        businessOwnerId: scope.businessOwnerId,
+        shopId: existing.data.shop_id,
+      },
       productId,
       quantityDelta,
       `Stock adjusted by staff ${context.user.id}`
     )
 
-    const updated = await getProductById(context.supabase, productId)
+    const updated = await getProductById(context.supabase, productId, scope)
     if (!updated.ok) {
       return NextResponse.json({ message: updated.message }, { status: updated.status })
     }
@@ -160,26 +166,50 @@ export async function PATCH(request, { params }) {
     const nextQuantity = toPositiveInteger(patch.quantity)
     const delta = nextQuantity - currentQuantity
     if (delta > 0) {
-      await logStockChange(context.supabase, productId, delta, `Stock added by business ${context.user.id}`)
+      await logStockChange(
+        context.supabase,
+        {
+          businessOwnerId: scope.businessOwnerId,
+          shopId: existing.data.shop_id,
+        },
+        productId,
+        delta,
+        `Stock added by business ${context.user.id}`
+      )
     } else if (delta < 0) {
-      await logStockChange(context.supabase, productId, delta, `Stock reduced by business ${context.user.id}`)
+      await logStockChange(
+        context.supabase,
+        {
+          businessOwnerId: scope.businessOwnerId,
+          shopId: existing.data.shop_id,
+        },
+        productId,
+        delta,
+        `Stock reduced by business ${context.user.id}`
+      )
     }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, "quantity")) {
+    patch.stock = patch.quantity
   }
 
   patch.updated_at = new Date().toISOString()
 
-  const { data, error } = await context.supabase
+  let updateQuery = context.supabase
     .from("products")
     .update(patch)
     .eq("id", productId)
-    .select("id, name, sku, category, price, quantity, unit, created_at, updated_at")
-    .single()
+
+  updateQuery = applyShopScope(updateQuery, scope)
+
+  const { data, error } = await updateQuery.select(PRODUCT_SELECT_FIELDS).single()
 
   if (error) {
     return NextResponse.json({ message: error.message }, { status: 400 })
   }
 
-  return NextResponse.json({ product: data, message: "Product updated successfully." }, { status: 200 })
+  return NextResponse.json({ product: mapProductRow(data), message: "Product updated successfully." }, { status: 200 })
 }
 
 export async function DELETE(_request, { params }) {
@@ -199,12 +229,24 @@ export async function DELETE(_request, { params }) {
     return NextResponse.json({ message: "Product id is required." }, { status: 400 })
   }
 
-  const existing = await getProductById(context.supabase, productId)
+  const scope = await resolveShopScope(context)
+  if (!scope.ok) {
+    return NextResponse.json({ message: scope.message }, { status: scope.status })
+  }
+
+  const existing = await getProductById(context.supabase, productId, scope)
   if (!existing.ok) {
     return NextResponse.json({ message: existing.message }, { status: existing.status })
   }
 
-  const { error } = await context.supabase.from("products").delete().eq("id", productId)
+  let deleteQuery = context.supabase
+    .from("products")
+    .delete()
+    .eq("id", productId)
+
+  deleteQuery = applyShopScope(deleteQuery, scope)
+
+  const { error } = await deleteQuery
   if (error) {
     return NextResponse.json({ message: error.message }, { status: 400 })
   }

@@ -1,8 +1,18 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { useShopScope } from "./use-shop-scope"
 
 export default function StockAdjuster({ title = "Update Stock", subtitle = "Change quantity quickly for any product." }) {
+  const {
+    shops,
+    activeShop,
+    activeShopId,
+    setActiveShopId,
+    shopLocked,
+    loadingShops,
+    shopError,
+  } = useShopScope()
   const [products, setProducts] = useState([])
   const [deltaMap, setDeltaMap] = useState({})
   const [search, setSearch] = useState("")
@@ -11,11 +21,18 @@ export default function StockAdjuster({ title = "Update Stock", subtitle = "Chan
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
 
-  async function loadProducts() {
+  const loadProducts = useCallback(async (shopId) => {
+    if (!shopId) {
+      setProducts([])
+      setDeltaMap({})
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
     setError("")
     try {
-      const response = await fetch("/api/products", { cache: "no-store" })
+      const response = await fetch(`/api/products?shopId=${encodeURIComponent(shopId)}`, { cache: "no-store" })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) {
         throw new Error(data.message || "Failed to load products.")
@@ -26,11 +43,15 @@ export default function StockAdjuster({ title = "Update Stock", subtitle = "Chan
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
-    loadProducts()
-  }, [])
+    if (loadingShops) {
+      return
+    }
+
+    loadProducts(activeShopId)
+  }, [activeShopId, loadingShops, loadProducts])
 
   const filteredProducts = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -61,6 +82,11 @@ export default function StockAdjuster({ title = "Update Stock", subtitle = "Chan
   }, [deltaMap])
 
   async function saveAdjustments() {
+    if (!activeShopId) {
+      setError("Select a shop before updating stock.")
+      return
+    }
+
     if (!pendingEntries.length) {
       setError("Please enter at least one quantity change.")
       return
@@ -85,7 +111,7 @@ export default function StockAdjuster({ title = "Update Stock", subtitle = "Chan
 
       setMessage(`Stock updated for ${pendingEntries.length} product(s).`)
       setDeltaMap({})
-      await loadProducts()
+      await loadProducts(activeShopId)
     } catch (saveError) {
       setError(saveError.message || "Unable to save stock updates.")
     } finally {
@@ -108,10 +134,35 @@ export default function StockAdjuster({ title = "Update Stock", subtitle = "Chan
         />
       </div>
 
+      <div className="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+        <label className="block">
+          <span className="mb-2 block text-sm font-medium text-[var(--foreground)]">Shop</span>
+          <select
+            className="ui-select"
+            value={activeShopId}
+            onChange={(event) => setActiveShopId(event.target.value)}
+            disabled={shopLocked || loadingShops || shops.length === 0}
+          >
+            {shops.length === 0 ? <option value="">No shop available</option> : null}
+            {shops.map((shop) => (
+              <option key={shop.id} value={shop.id}>
+                {shop.shop_name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="text-sm text-[var(--ink-muted)]">
+          {activeShop ? `Updating stock for ${activeShop.shop_name}.` : "Pick a shop to update its stock."}
+        </div>
+      </div>
+
+      {shopError ? <p className="mt-4 text-sm text-red-600">{shopError}</p> : null}
       {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
       {message ? <p className="mt-4 text-sm text-emerald-700">{message}</p> : null}
 
-      {loading ? (
+      {!loadingShops && shops.length === 0 ? (
+        <p className="mt-6 text-sm text-[var(--ink-muted)]">No shop is available for stock updates yet.</p>
+      ) : loadingShops || loading ? (
         <p className="mt-6 text-sm text-[var(--ink-muted)]">Loading products...</p>
       ) : (
         <div className="mt-6 space-y-3">
@@ -126,7 +177,7 @@ export default function StockAdjuster({ title = "Update Stock", subtitle = "Chan
                 <div>
                   <p className="font-medium text-[var(--foreground)]">{product.name}</p>
                   <p className="text-xs text-[var(--ink-muted)]">
-                    SKU: {product.sku || "N/A"} • Category: {product.category || "N/A"}
+                    SKU: {product.sku || "N/A"} â€¢ Category: {product.category || "N/A"}
                   </p>
                 </div>
                 <div className="text-sm text-[var(--foreground)]">
@@ -155,7 +206,7 @@ export default function StockAdjuster({ title = "Update Stock", subtitle = "Chan
           type="button"
           onClick={saveAdjustments}
           className="ui-btn-primary px-5 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-70"
-          disabled={saving}
+          disabled={saving || loadingShops || shops.length === 0}
         >
           {saving ? "Saving..." : `Save ${pendingEntries.length} Change${pendingEntries.length === 1 ? "" : "s"}`}
         </button>

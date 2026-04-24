@@ -1,18 +1,22 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f3f7fb;
+  --background: #eff5f8;
   --foreground: #122033;
   --surface: #ffffff;
+  --surface-elevated: rgba(255, 255, 255, 0.94);
   --surface-strong: #ffffff;
-  --surface-soft: #f7fafc;
-  --border: rgba(148, 163, 184, 0.35);
+  --surface-soft: #f5f8fb;
+  --border: rgba(148, 163, 184, 0.3);
+  --border-strong: rgba(15, 23, 42, 0.12);
   --accent: #2f9e6b;
   --accent-deep: #1f7a4f;
   --accent-soft: rgba(47, 158, 107, 0.12);
   --ink-muted: #64748b;
   --ring: rgba(47, 158, 107, 0.24);
-  --font-sans: "Trebuchet MS", "Gill Sans", "Segoe UI", sans-serif;
+  --shadow-soft: 0 18px 40px rgba(15, 23, 42, 0.08);
+  --shadow-strong: 0 26px 60px rgba(15, 23, 42, 0.12);
+  --font-sans: "Nirmala UI", "Noto Sans Devanagari", "Trebuchet MS", "Gill Sans", "Segoe UI", sans-serif;
   --font-display: "Palatino Linotype", "Book Antiqua", Georgia, serif;
 }
 
@@ -27,12 +31,17 @@ html {
 body {
   margin: 0;
   background:
-    radial-gradient(circle at top, rgba(47, 158, 107, 0.09), transparent 28%),
-    radial-gradient(circle at 20% 26%, rgba(59, 130, 246, 0.08), transparent 22%),
-    radial-gradient(circle at 82% 10%, rgba(14, 165, 233, 0.06), transparent 24%),
-    linear-gradient(180deg, #f8fbff 0%, #f3f7fb 46%, #eef4fa 100%);
+    radial-gradient(circle at top, rgba(47, 158, 107, 0.11), transparent 28%),
+    radial-gradient(circle at 16% 24%, rgba(59, 130, 246, 0.09), transparent 22%),
+    radial-gradient(circle at 82% 10%, rgba(14, 165, 233, 0.08), transparent 22%),
+    linear-gradient(180deg, #f9fcff 0%, #eff5f8 46%, #e8f0f7 100%);
   color: var(--foreground);
   font-family: var(--font-sans);
+}
+
+::selection {
+  background: rgba(47, 158, 107, 0.18);
+  color: var(--foreground);
 }
 
 h1,
@@ -49,26 +58,35 @@ a {
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
+html[data-language="hi"] h1,
+html[data-language="hi"] h2,
+html[data-language="hi"] h3,
+html[data-language="hi"] h4 {
+  font-family: var(--font-sans);
+}
+
 .glass {
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--surface-elevated);
   border: 1px solid var(--border);
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.09);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(18px);
 }
 
 .ui-card {
   border: 1px solid var(--border);
-  background: var(--surface);
-  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-soft);
 }
 
 .ui-panel {
   border: 1px solid var(--border);
   background: var(--surface-soft);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
 }
 
 .ui-eyebrow {
@@ -87,44 +105,54 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-height: 3rem;
   border-radius: 9999px;
   border: 1px solid rgba(31, 122, 79, 0.25);
   background: var(--accent);
   color: #ffffff;
   font-weight: 600;
+  box-shadow: 0 12px 24px rgba(47, 158, 107, 0.18);
   transition: all 0.2s ease;
 }
 
 .ui-btn-primary:hover {
   background: var(--accent-deep);
+  transform: translateY(-1px);
 }
 
 .ui-btn-secondary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-height: 3rem;
   border-radius: 9999px;
   border: 1px solid var(--border);
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.92);
   color: var(--foreground);
   font-weight: 600;
   transition: all 0.2s ease;
 }
 
 .ui-btn-secondary:hover {
+  border-color: rgba(47, 158, 107, 0.24);
   background: #f8fafc;
+  transform: translateY(-1px);
 }
 
 .ui-input,
 .ui-select,
 .ui-textarea {
   width: 100%;
+  min-height: 3rem;
   border-radius: 0.85rem;
   border: 1px solid var(--border);
   background: #ffffff;
   color: var(--foreground);
   padding: 0.75rem 0.9rem;
+  font-size: 1rem;
+  line-height: 1.5;
   outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
 .ui-input:focus,
@@ -132,4 +160,9 @@ textarea {
 .ui-textarea:focus {
   border-color: rgba(47, 158, 107, 0.5);
   box-shadow: 0 0 0 4px var(--ring);
+}
+
+.ui-input::placeholder,
+.ui-textarea::placeholder {
+  color: #94a3b8;
 }

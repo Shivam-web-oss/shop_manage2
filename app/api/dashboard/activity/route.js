@@ -1,24 +1,12 @@
 import { NextResponse } from "next/server"
 import { getApiAuthContext, hasAnyRole } from "@/lib/api-auth"
 import { ROLES } from "@/lib/authz"
-import { DEFAULT_STAFF_PERMISSIONS, mapPermissionsFromRow } from "@/lib/staff-permissions"
+import { detectBillingSchema, isMissingSchemaError, mapLegacyBillRow, mapOrderRow } from "@/lib/billing-storage"
+import { applyShopScope, getShopIdFromRequest, resolveShopScope } from "@/lib/shop-access"
 
-async function getStaffPermissions(supabase, staffUserId) {
-  const { data, error } = await supabase
-    .from("staff_permissions")
-    .select("can_create_bill, can_update_stock, can_view_reports")
-    .eq("staff_user_id", staffUserId)
-    .maybeSingle()
-
-  if (error) {
-    if (error.code === "42P01") {
-      return { ...DEFAULT_STAFF_PERMISSIONS }
-    }
-    return { ...DEFAULT_STAFF_PERMISSIONS }
-  }
-
-  return mapPermissionsFromRow(data)
-}
+const ORDER_ACTIVITY_SELECT_FIELDS = "id, total, created_at, updated_at, status, customer_id, customers(id, shop_id, name, phone)"
+const LEGACY_BILL_ACTIVITY_SELECT_FIELDS =
+  "id, shop_id, customer_name, customer_phone, subtotal, discount_percent, discount_amount, gst_amount, total_amount, payment_method, status, created_at"
 
 function startOfToday() {
   const date = new Date()
@@ -40,6 +28,42 @@ function compareByTimeDesc(a, b) {
   return aTime > bTime ? -1 : 1
 }
 
+function getSchemaAwareMessage(error) {
+  return isMissingSchemaError(error)
+    ? "Billing data is not fully set up in Supabase yet. Run the latest billing SQL for this project and redeploy."
+    : error?.message ?? "Unable to load dashboard activity."
+}
+
+async function getScopedCustomerIds(supabase, scope) {
+  let query = supabase.from("customers").select("id, shop_id")
+  query = applyShopScope(query, scope)
+
+  const { data, error } = await query
+
+  if (error) {
+    return { ok: false, message: error.message, ids: [], error }
+  }
+
+  return {
+    ok: true,
+    message: null,
+    ids: (data ?? []).map((customer) => customer.id).filter(Boolean),
+  }
+}
+
+function buildBillActivities(bills, schema) {
+  return bills.map((bill) => {
+    const paymentMethod = bill.payment_method ? ` via ${bill.payment_method}` : ""
+    return {
+      id: `${schema === "modern" ? "order" : "bill"}-${bill.id}`,
+      type: schema === "modern" ? "order" : "bill",
+      title: `${schema === "modern" ? "Order" : "Bill"} created for ${bill.customer_name || "Walk-in"}`,
+      description: `Amount Rs.${Number(bill.total_amount ?? 0).toFixed(2)}${paymentMethod}`,
+      timestamp: bill.created_at,
+    }
+  })
+}
+
 export async function GET(request) {
   const context = await getApiAuthContext()
   if (!context.ok) {
@@ -50,96 +74,116 @@ export async function GET(request) {
     return NextResponse.json({ message: "You are not allowed to view activity." }, { status: 403 })
   }
 
-  if (context.role === ROLES.STAFF) {
-    const permissions = await getStaffPermissions(context.supabase, context.user.id)
-    if (!permissions.can_view_reports) {
-      return NextResponse.json({ message: "You don't have permission to view reports." }, { status: 403 })
-    }
+  const scope = await resolveShopScope(context, {
+    requestedShopId: getShopIdFromRequest(request),
+  })
+
+  if (!scope.ok) {
+    return NextResponse.json({ message: scope.message }, { status: scope.status })
+  }
+
+  if (context.role === ROLES.STAFF && !scope.permissions.can_view_reports) {
+    return NextResponse.json({ message: "You don't have permission to view reports." }, { status: 403 })
   }
 
   const requestUrl = new URL(request.url)
   const limit = Math.min(Math.max(Number.parseInt(requestUrl.searchParams.get("limit") ?? "20", 10) || 20, 1), 200)
   const dayStartIso = startOfToday()
+  const billingSchemaResult = await detectBillingSchema(context.supabase, scope)
 
-  const [productsResult, billsResult, stockLogsResult, shopsResult] = await Promise.all([
-    context.supabase.from("products").select("id, quantity", { count: "exact" }),
-    context.supabase
-      .from("bills")
-      .select("id, customer_name, total_amount, payment_method, created_at", { count: "exact" })
+  if (!billingSchemaResult.ok) {
+    return NextResponse.json({ message: billingSchemaResult.message }, { status: billingSchemaResult.status })
+  }
+
+  const productsQuery = applyShopScope(
+    context.supabase.from("products").select("id, name, stock, quantity, updated_at", { count: "exact" }),
+    scope
+  )
+
+  let salesPromise
+  if (billingSchemaResult.schema === "modern") {
+    const customerIdsResult = await getScopedCustomerIds(context.supabase, scope)
+    if (!customerIdsResult.ok) {
+      return NextResponse.json({ message: getSchemaAwareMessage(customerIdsResult.error) }, { status: 400 })
+    }
+
+    salesPromise = customerIdsResult.ids.length
+      ? context.supabase
+          .from("orders")
+          .select(ORDER_ACTIVITY_SELECT_FIELDS, { count: "exact" })
+          .in("customer_id", customerIdsResult.ids)
+          .order("created_at", { ascending: false })
+          .limit(limit)
+      : Promise.resolve({ data: [], error: null, count: 0 })
+  } else {
+    salesPromise = applyShopScope(
+      context.supabase.from("bills").select(LEGACY_BILL_ACTIVITY_SELECT_FIELDS, { count: "exact" }),
+      scope
+    )
       .order("created_at", { ascending: false })
-      .limit(limit),
-    context.supabase
-      .from("stock_logs")
-      .select("id, product_id, quantity_added, updated_at, products(name)")
-      .order("updated_at", { ascending: false })
-      .limit(limit),
-    context.supabase.from("business").select("id", { count: "exact" }).eq("user_id", context.user.id),
-  ])
+      .limit(limit)
+  }
+
+  const [productsResult, salesResult] = await Promise.all([productsQuery, salesPromise])
 
   if (productsResult.error) {
     return NextResponse.json({ message: productsResult.error.message }, { status: 400 })
   }
-  if (billsResult.error) {
-    return NextResponse.json({ message: billsResult.error.message }, { status: 400 })
-  }
-  if (stockLogsResult.error) {
-    return NextResponse.json({ message: stockLogsResult.error.message }, { status: 400 })
-  }
-  if (shopsResult.error) {
-    return NextResponse.json({ message: shopsResult.error.message }, { status: 400 })
+  if (salesResult.error) {
+    return NextResponse.json({ message: getSchemaAwareMessage(salesResult.error) }, { status: 400 })
   }
 
   let staffCount = 0
   const { count: staffPermissionCount, error: staffError } = await context.supabase
     .from("staff_permissions")
     .select("id", { count: "exact", head: true })
-    .eq("business_owner_id", context.user.id)
+    .eq("business_owner_id", scope.businessOwnerId)
 
   if (!staffError && typeof staffPermissionCount === "number") {
     staffCount = staffPermissionCount
-  } else {
-    const { count: profileStaffCount } = await context.supabase
-      .from("profiles")
-      .select("id", { count: "exact", head: true })
-      .eq("role", ROLES.STAFF)
-    staffCount = profileStaffCount ?? 0
   }
 
-  const billsToday = (billsResult.data ?? []).filter((bill) => (bill.created_at ?? "") >= dayStartIso)
-  const revenueToday = billsToday.reduce((sum, bill) => sum + Number(bill.total_amount ?? 0), 0)
-  const lowStockCount = (productsResult.data ?? []).filter((product) => Number(product.quantity ?? 0) <= 5).length
+  const mappedSales =
+    billingSchemaResult.schema === "modern"
+      ? (salesResult.data ?? []).map(mapOrderRow)
+      : (salesResult.data ?? []).map(mapLegacyBillRow)
 
-  const billActivities = (billsResult.data ?? []).map((bill) => ({
-    id: `bill-${bill.id}`,
-    type: "bill",
-    title: `Bill created for ${bill.customer_name || "Walk-in"}`,
-    description: `Amount ₹${Number(bill.total_amount ?? 0).toFixed(2)} via ${bill.payment_method || "cash"}`,
-    timestamp: bill.created_at,
-  }))
+  const salesToday = mappedSales.filter((bill) => (bill.created_at ?? "") >= dayStartIso)
+  const revenueToday = salesToday.reduce((sum, bill) => sum + Number(bill.total_amount ?? 0), 0)
+  const lowStockCount = (productsResult.data ?? []).filter((product) => {
+    const quantity = Number(product.quantity ?? product.stock ?? 0)
+    return quantity <= 5
+  }).length
 
-  const stockActivities = (stockLogsResult.data ?? []).map((log) => ({
-    id: `stock-${log.id}`,
-    type: "stock",
-    title: `${log.products?.name || "Product"} stock changed`,
-    description: `${Number(log.quantity_added ?? 0) >= 0 ? "+" : ""}${Number(log.quantity_added ?? 0)} units`,
-    timestamp: log.updated_at,
-  }))
+  const billActivities = buildBillActivities(mappedSales, billingSchemaResult.schema)
 
-  const activities = [...billActivities, ...stockActivities].sort(compareByTimeDesc).slice(0, limit)
+  const productActivities = (productsResult.data ?? [])
+    .filter((product) => product.updated_at)
+    .sort((a, b) => compareByTimeDesc({ timestamp: a.updated_at }, { timestamp: b.updated_at }))
+    .slice(0, limit)
+    .map((product) => ({
+      id: `product-${product.id}`,
+      type: "stock",
+      title: `${product.name || "Product"} updated`,
+      description: `Current stock ${Number(product.quantity ?? product.stock ?? 0)}`,
+      timestamp: product.updated_at,
+    }))
+
+  const activities = [...billActivities, ...productActivities].sort(compareByTimeDesc).slice(0, limit)
 
   return NextResponse.json(
     {
       metrics: {
-        shops_count: shopsResult.count ?? 0,
+        shops_count: scope.activeShopId ? 1 : scope.accessibleShopIds.length,
         products_count: productsResult.count ?? 0,
         staff_count: staffCount,
-        bills_today: billsToday.length,
+        bills_today: salesToday.length,
         revenue_today: Number(revenueToday.toFixed(2)),
         low_stock_count: lowStockCount,
       },
       activities,
-      latest_bills: billsResult.data ?? [],
-      latest_stock_logs: stockLogsResult.data ?? [],
+      latest_bills: mappedSales,
+      latest_stock_logs: productActivities,
     },
     { status: 200 }
   )

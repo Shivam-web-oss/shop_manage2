@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getApiAuthContext, hasAnyRole } from "@/lib/api-auth"
 import { ROLES } from "@/lib/authz"
+import { resolveShopScope, serializeShopScope } from "@/lib/shop-access"
 
 function normalizeShopPayload(body = {}) {
   return {
@@ -18,21 +19,27 @@ export async function GET() {
     return NextResponse.json({ message: context.message }, { status: context.status })
   }
 
-  if (!hasAnyRole(context.role, [ROLES.BUSINESS])) {
-    return NextResponse.json({ message: "Only business users can view shops." }, { status: 403 })
+  if (!hasAnyRole(context.role, [ROLES.BUSINESS, ROLES.STAFF])) {
+    return NextResponse.json({ message: "You are not allowed to view shops." }, { status: 403 })
   }
 
-  const { data, error } = await context.supabase
-    .from("business")
-    .select("id, company_name, shop_name, location, description, created_at, user_id")
-    .eq("user_id", context.user.id)
-    .order("created_at", { ascending: true })
-
-  if (error) {
-    return NextResponse.json({ message: error.message }, { status: 400 })
+  const scope = await resolveShopScope(context, { defaultToFirstShop: true })
+  if (!scope.ok) {
+    return NextResponse.json({ message: scope.message }, { status: scope.status })
   }
 
-  return NextResponse.json({ shops: data ?? [] }, { status: 200 })
+  const access = serializeShopScope(scope)
+
+  return NextResponse.json(
+    {
+      shops: access.shops,
+      access: {
+        active_shop_id: access.active_shop_id,
+        shop_locked: access.shop_locked,
+      },
+    },
+    { status: 200 }
+  )
 }
 
 export async function POST(request) {

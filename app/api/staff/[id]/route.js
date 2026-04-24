@@ -3,19 +3,20 @@ import { getApiAuthContext, hasAnyRole } from "@/lib/api-auth"
 import { ROLES } from "@/lib/authz"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { normalizeStaffPermissions } from "@/lib/staff-permissions"
+import { findOwnedShop, listOwnedShops, normalizeRequestedShopId } from "@/lib/shop-access"
 
 const TABLE_SETUP_MESSAGE =
-  "Staff access table is missing. Run the SQL in sql/staff-permissions.sql and try again."
+  "Staff access table is missing. Run the SQL in sql/staff-permissions.sql and sql/add-shop-scope.sql and try again."
 
 async function findStaffAssignment(adminClient, businessOwnerId, staffUserId) {
   const { data, error } = await adminClient
     .from("staff_permissions")
-    .select("id, staff_user_id, business_owner_id")
+    .select("id, staff_user_id, business_owner_id, assigned_shop_id")
     .eq("business_owner_id", businessOwnerId)
     .eq("staff_user_id", staffUserId)
     .maybeSingle()
 
-  if (error?.code === "42P01") {
+  if (error?.code === "42P01" || error?.code === "42703") {
     return { ok: false, status: 500, message: TABLE_SETUP_MESSAGE, data: null }
   }
 
@@ -28,6 +29,34 @@ async function findStaffAssignment(adminClient, businessOwnerId, staffUserId) {
   }
 
   return { ok: true, status: 200, message: null, data }
+}
+
+async function resolveAssignedShop(adminClient, businessOwnerId, requestedShopId) {
+  const normalizedShopId = normalizeRequestedShopId(requestedShopId)
+
+  if (normalizedShopId) {
+    const ownedShop = await findOwnedShop(adminClient, businessOwnerId, normalizedShopId)
+    if (!ownedShop.ok) {
+      return { ok: false, status: ownedShop.status, message: "Assigned shop is invalid.", shop: null }
+    }
+
+    return { ok: true, status: 200, message: null, shop: ownedShop.shop }
+  }
+
+  const ownedShops = await listOwnedShops(adminClient, businessOwnerId)
+  if (!ownedShops.ok) {
+    return { ok: false, status: ownedShops.status, message: ownedShops.message, shop: null }
+  }
+
+  if (!ownedShops.shops.length) {
+    return { ok: false, status: 400, message: "Create a shop before assigning staff access.", shop: null }
+  }
+
+  if (ownedShops.shops.length > 1) {
+    return { ok: false, status: 400, message: "Assign a shop to the staff account.", shop: null }
+  }
+
+  return { ok: true, status: 200, message: null, shop: ownedShops.shops[0] }
 }
 
 export async function PATCH(request, { params }) {
@@ -73,6 +102,22 @@ export async function PATCH(request, { params }) {
     return NextResponse.json({ message: "Full name cannot be empty." }, { status: 400 })
   }
 
+  let assignedShop = null
+  if (
+    Object.prototype.hasOwnProperty.call(body, "assigned_shop_id") ||
+    Object.prototype.hasOwnProperty.call(body, "assignedShopId")
+  ) {
+    assignedShop = await resolveAssignedShop(
+      adminClient,
+      context.user.id,
+      normalizeRequestedShopId(body.assigned_shop_id, body.assignedShopId)
+    )
+
+    if (!assignedShop.ok) {
+      return NextResponse.json({ message: assignedShop.message }, { status: assignedShop.status })
+    }
+  }
+
   if (nextFullName !== null) {
     const { error: profileError } = await adminClient
       .from("profiles")
@@ -89,16 +134,39 @@ export async function PATCH(request, { params }) {
 
   if (Object.prototype.hasOwnProperty.call(body, "permissions")) {
     const permissions = normalizeStaffPermissions(body.permissions)
+    const updatePayload = {
+      ...permissions,
+      updated_at: new Date().toISOString(),
+    }
+
+    if (assignedShop?.shop?.id) {
+      updatePayload.assigned_shop_id = assignedShop.shop.id
+    }
+
+    const { error: permissionError } = await adminClient
+      .from("staff_permissions")
+      .update(updatePayload)
+      .eq("staff_user_id", staffUserId)
+      .eq("business_owner_id", context.user.id)
+
+    if (permissionError?.code === "42P01" || permissionError?.code === "42703") {
+      return NextResponse.json({ message: TABLE_SETUP_MESSAGE }, { status: 500 })
+    }
+
+    if (permissionError) {
+      return NextResponse.json({ message: permissionError.message }, { status: 400 })
+    }
+  } else if (assignedShop?.shop?.id) {
     const { error: permissionError } = await adminClient
       .from("staff_permissions")
       .update({
-        ...permissions,
+        assigned_shop_id: assignedShop.shop.id,
         updated_at: new Date().toISOString(),
       })
       .eq("staff_user_id", staffUserId)
       .eq("business_owner_id", context.user.id)
 
-    if (permissionError?.code === "42P01") {
+    if (permissionError?.code === "42P01" || permissionError?.code === "42703") {
       return NextResponse.json({ message: TABLE_SETUP_MESSAGE }, { status: 500 })
     }
 
@@ -119,13 +187,25 @@ export async function PATCH(request, { params }) {
 
   const { data: permissionRow, error: permissionReadError } = await adminClient
     .from("staff_permissions")
-    .select("can_create_bill, can_update_stock, can_view_reports")
+    .select("assigned_shop_id, can_create_bill, can_update_stock, can_view_reports")
     .eq("staff_user_id", staffUserId)
     .eq("business_owner_id", context.user.id)
     .maybeSingle()
 
+  if (permissionReadError?.code === "42P01" || permissionReadError?.code === "42703") {
+    return NextResponse.json({ message: TABLE_SETUP_MESSAGE }, { status: 500 })
+  }
+
   if (permissionReadError) {
     return NextResponse.json({ message: permissionReadError.message }, { status: 400 })
+  }
+
+  let assignedShopName = null
+  if (permissionRow?.assigned_shop_id) {
+    const ownedShop = await findOwnedShop(adminClient, context.user.id, permissionRow.assigned_shop_id)
+    if (ownedShop.ok) {
+      assignedShopName = ownedShop.shop.shop_name
+    }
   }
 
   return NextResponse.json(
@@ -141,6 +221,8 @@ export async function PATCH(request, { params }) {
           can_update_stock: permissionRow?.can_update_stock ?? true,
           can_view_reports: permissionRow?.can_view_reports ?? true,
         },
+        assigned_shop_id: permissionRow?.assigned_shop_id ?? null,
+        assigned_shop_name: assignedShopName,
       },
     },
     { status: 200 }

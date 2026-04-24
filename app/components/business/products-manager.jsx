@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { useShopScope } from "./use-shop-scope"
 
 const EMPTY_FORM = {
   name: "",
@@ -12,7 +13,7 @@ const EMPTY_FORM = {
 }
 
 function toCurrency(value) {
-  return `₹${Number(value ?? 0).toFixed(2)}`
+  return `â‚¹${Number(value ?? 0).toFixed(2)}`
 }
 
 function toNumberInput(value) {
@@ -21,6 +22,15 @@ function toNumberInput(value) {
 }
 
 export default function ProductsManager() {
+  const {
+    shops,
+    activeShop,
+    activeShopId,
+    setActiveShopId,
+    shopLocked,
+    loadingShops,
+    shopError,
+  } = useShopScope()
   const [products, setProducts] = useState([])
   const [drafts, setDrafts] = useState({})
   const [form, setForm] = useState(EMPTY_FORM)
@@ -30,11 +40,18 @@ export default function ProductsManager() {
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
 
-  async function loadProducts() {
+  const loadProducts = useCallback(async (shopId) => {
+    if (!shopId) {
+      setProducts([])
+      setDrafts({})
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
     setError("")
     try {
-      const response = await fetch("/api/products", { cache: "no-store" })
+      const response = await fetch(`/api/products?shopId=${encodeURIComponent(shopId)}`, { cache: "no-store" })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) {
         throw new Error(data.message || "Failed to load products.")
@@ -60,11 +77,15 @@ export default function ProductsManager() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
-    loadProducts()
-  }, [])
+    if (loadingShops) {
+      return
+    }
+
+    loadProducts(activeShopId)
+  }, [activeShopId, loadingShops, loadProducts])
 
   const filteredProducts = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -89,12 +110,18 @@ export default function ProductsManager() {
       return
     }
 
+    if (!activeShopId) {
+      setError("Select a shop before creating a product.")
+      return
+    }
+
     setSaving(true)
     try {
       const response = await fetch("/api/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          shop_id: activeShopId,
           ...form,
           name: form.name.trim(),
           sku: form.sku.trim(),
@@ -110,7 +137,7 @@ export default function ProductsManager() {
 
       setForm(EMPTY_FORM)
       setMessage("Product created successfully.")
-      await loadProducts()
+      await loadProducts(activeShopId)
     } catch (saveError) {
       setError(saveError.message || "Unable to create product.")
     } finally {
@@ -139,6 +166,11 @@ export default function ProductsManager() {
       return
     }
 
+    if (!activeShopId) {
+      setError("Select a shop before updating a product.")
+      return
+    }
+
     setSaving(true)
     try {
       const response = await fetch(`/api/products/${productId}`, {
@@ -159,7 +191,7 @@ export default function ProductsManager() {
       }
 
       setMessage("Product updated.")
-      await loadProducts()
+      await loadProducts(activeShopId)
     } catch (saveError) {
       setError(saveError.message || "Unable to update product.")
     } finally {
@@ -185,7 +217,7 @@ export default function ProductsManager() {
       }
 
       setMessage("Product deleted.")
-      await loadProducts()
+      await loadProducts(activeShopId)
     } catch (deleteError) {
       setError(deleteError.message || "Unable to delete product.")
     } finally {
@@ -200,6 +232,28 @@ export default function ProductsManager() {
         <p className="mt-2 text-sm text-[var(--ink-muted)]">
           Fill in basic details and click save. You can edit or delete it anytime below.
         </p>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-[var(--foreground)]">Shop</span>
+            <select
+              className="ui-select"
+              value={activeShopId}
+              onChange={(event) => setActiveShopId(event.target.value)}
+              disabled={shopLocked || loadingShops || shops.length === 0}
+            >
+              {shops.length === 0 ? <option value="">No shop available</option> : null}
+              {shops.map((shop) => (
+                <option key={shop.id} value={shop.id}>
+                  {shop.shop_name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="text-sm text-[var(--ink-muted)]">
+            {activeShop ? `Managing products for ${activeShop.shop_name}.` : "Pick a shop to manage its products."}
+          </div>
+        </div>
 
         <form onSubmit={handleCreateProduct} className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <input
@@ -253,7 +307,7 @@ export default function ProductsManager() {
           />
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || loadingShops || shops.length === 0}
             className="ui-btn-primary px-5 py-3 text-sm md:col-span-2 xl:col-span-3 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {saving ? "Saving..." : "Save Product"}
@@ -275,10 +329,13 @@ export default function ProductsManager() {
           />
         </div>
 
+        {shopError ? <p className="mt-4 text-sm text-red-600">{shopError}</p> : null}
         {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
         {message ? <p className="mt-4 text-sm text-emerald-700">{message}</p> : null}
 
-        {loading ? (
+        {!loadingShops && shops.length === 0 ? (
+          <p className="mt-6 text-sm text-[var(--ink-muted)]">Create a shop first to manage products.</p>
+        ) : loadingShops || loading ? (
           <p className="mt-6 text-sm text-[var(--ink-muted)]">Loading products...</p>
         ) : filteredProducts.length === 0 ? (
           <p className="mt-6 text-sm text-[var(--ink-muted)]">No products found.</p>
@@ -334,7 +391,7 @@ export default function ProductsManager() {
                   </div>
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                     <p className="text-xs text-[var(--ink-muted)]">
-                      Current: {toCurrency(product.price)} • Qty {Number(product.quantity ?? 0)} • Updated{" "}
+                      Current: {toCurrency(product.price)} â€¢ Qty {Number(product.quantity ?? 0)} â€¢ Updated{" "}
                       {product.updated_at ? new Date(product.updated_at).toLocaleString() : "N/A"}
                     </p>
                     <div className="flex gap-2">

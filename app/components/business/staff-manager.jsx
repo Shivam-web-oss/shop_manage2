@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
+import { useShopScope } from "./use-shop-scope"
 
 const DEFAULT_PERMISSIONS = {
   can_create_bill: true,
@@ -9,6 +10,7 @@ const DEFAULT_PERMISSIONS = {
 }
 
 export default function StaffManager() {
+  const { shops, activeShopId, loadingShops, shopError } = useShopScope()
   const [staff, setStaff] = useState([])
   const [drafts, setDrafts] = useState({})
   const [loading, setLoading] = useState(true)
@@ -19,10 +21,25 @@ export default function StaffManager() {
     full_name: "",
     email: "",
     password: "",
+    assigned_shop_id: "",
     permissions: { ...DEFAULT_PERMISSIONS },
   })
 
-  async function loadStaff() {
+  useEffect(() => {
+    if (loadingShops) {
+      return
+    }
+
+    setCreateForm((previous) => ({
+      ...previous,
+      assigned_shop_id:
+        previous.assigned_shop_id && shops.some((shop) => shop.id === previous.assigned_shop_id)
+          ? previous.assigned_shop_id
+          : activeShopId || shops[0]?.id || "",
+    }))
+  }, [activeShopId, loadingShops, shops])
+
+  const loadStaff = useCallback(async () => {
     setLoading(true)
     setError("")
     try {
@@ -38,6 +55,7 @@ export default function StaffManager() {
         rows.reduce((acc, row) => {
           acc[row.id] = {
             full_name: row.full_name ?? "",
+            assigned_shop_id: row.assigned_shop_id ?? "",
             permissions: {
               can_create_bill: row.permissions?.can_create_bill !== false,
               can_update_stock: row.permissions?.can_update_stock !== false,
@@ -52,11 +70,11 @@ export default function StaffManager() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     loadStaff()
-  }, [])
+  }, [loadStaff])
 
   function setCreatePermission(field, value) {
     setCreateForm((previous) => ({
@@ -76,6 +94,10 @@ export default function StaffManager() {
       setError("Please fill in name, email, and password.")
       return
     }
+    if (!createForm.assigned_shop_id) {
+      setError("Choose a shop for this staff account.")
+      return
+    }
 
     setSaving(true)
     try {
@@ -86,6 +108,7 @@ export default function StaffManager() {
           full_name: createForm.full_name.trim(),
           email: createForm.email.trim().toLowerCase(),
           password: createForm.password,
+          assigned_shop_id: createForm.assigned_shop_id,
           permissions: createForm.permissions,
         }),
       })
@@ -99,6 +122,7 @@ export default function StaffManager() {
         full_name: "",
         email: "",
         password: "",
+        assigned_shop_id: activeShopId || shops[0]?.id || "",
         permissions: { ...DEFAULT_PERMISSIONS },
       })
       await loadStaff()
@@ -115,6 +139,18 @@ export default function StaffManager() {
       [staffId]: {
         ...previous[staffId],
         full_name: value,
+      },
+    }))
+    setError("")
+    setMessage("")
+  }
+
+  function setDraftShop(staffId, value) {
+    setDrafts((previous) => ({
+      ...previous,
+      [staffId]: {
+        ...previous[staffId],
+        assigned_shop_id: value,
       },
     }))
     setError("")
@@ -142,6 +178,10 @@ export default function StaffManager() {
       setError("Staff name cannot be empty.")
       return
     }
+    if (!draft?.assigned_shop_id) {
+      setError("Choose a shop before saving staff access.")
+      return
+    }
 
     setSaving(true)
     setError("")
@@ -152,6 +192,7 @@ export default function StaffManager() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           full_name: draft.full_name.trim(),
+          assigned_shop_id: draft.assigned_shop_id,
           permissions: draft.permissions,
         }),
       })
@@ -199,8 +240,10 @@ export default function StaffManager() {
       <article className="ui-card rounded-3xl p-6">
         <h2 className="text-2xl font-semibold text-[var(--foreground)]">Create Staff User</h2>
         <p className="mt-2 text-sm text-[var(--ink-muted)]">
-          Business owners can create staff accounts and control what each staff member can access.
+          Business owners can create staff accounts, assign a shop, and control what each staff member can access.
         </p>
+
+        {shopError ? <p className="mt-4 text-sm text-red-600">{shopError}</p> : null}
 
         <form onSubmit={createStaff} className="mt-5 grid gap-3 md:grid-cols-2">
           <input
@@ -226,6 +269,22 @@ export default function StaffManager() {
             onChange={(event) => setCreateForm((previous) => ({ ...previous, password: event.target.value }))}
             required
           />
+          <label className="md:col-span-2 block">
+            <span className="mb-2 block text-sm font-medium text-[var(--foreground)]">Assigned shop</span>
+            <select
+              className="ui-select"
+              value={createForm.assigned_shop_id}
+              onChange={(event) => setCreateForm((previous) => ({ ...previous, assigned_shop_id: event.target.value }))}
+              disabled={loadingShops || shops.length === 0}
+            >
+              {shops.length === 0 ? <option value="">No shop available</option> : null}
+              {shops.map((shop) => (
+                <option key={shop.id} value={shop.id}>
+                  {shop.shop_name}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="md:col-span-2 grid gap-2 rounded-2xl border border-[var(--border)] bg-white p-4 text-sm">
             <PermissionToggle
               label="Can create bills"
@@ -246,7 +305,7 @@ export default function StaffManager() {
           <button
             type="submit"
             className="ui-btn-primary px-5 py-3 text-sm md:col-span-2 disabled:cursor-not-allowed disabled:opacity-70"
-            disabled={saving}
+            disabled={saving || loadingShops || shops.length === 0}
           >
             {saving ? "Creating..." : "Create Staff Account"}
           </button>
@@ -255,7 +314,9 @@ export default function StaffManager() {
 
       <article className="ui-card rounded-3xl p-6">
         <h2 className="text-2xl font-semibold text-[var(--foreground)]">Manage Staff Access</h2>
-        <p className="mt-2 text-sm text-[var(--ink-muted)]">Staff can edit profile only. Role is locked and cannot be changed.</p>
+        <p className="mt-2 text-sm text-[var(--ink-muted)]">
+          Staff can edit profile only. Role is locked, but their permissions and assigned shop can be updated here.
+        </p>
         {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
         {message ? <p className="mt-4 text-sm text-emerald-700">{message}</p> : null}
 
@@ -268,6 +329,7 @@ export default function StaffManager() {
             {staff.map((member) => {
               const draft = drafts[member.id] ?? {
                 full_name: member.full_name ?? "",
+                assigned_shop_id: member.assigned_shop_id ?? activeShopId ?? shops[0]?.id ?? "",
                 permissions: { ...DEFAULT_PERMISSIONS },
               }
 
@@ -282,6 +344,25 @@ export default function StaffManager() {
                     <input className="ui-input" value={member.email ?? ""} disabled />
                   </div>
                   <p className="mt-2 text-xs uppercase tracking-[0.16em] text-[var(--ink-muted)]">Role: {member.role}</p>
+                  <label className="mt-3 block">
+                    <span className="mb-2 block text-sm font-medium text-[var(--foreground)]">Assigned shop</span>
+                    <select
+                      className="ui-select"
+                      value={draft.assigned_shop_id}
+                      onChange={(event) => setDraftShop(member.id, event.target.value)}
+                      disabled={loadingShops || shops.length === 0}
+                    >
+                      {shops.length === 0 ? <option value="">No shop available</option> : null}
+                      {shops.map((shop) => (
+                        <option key={shop.id} value={shop.id}>
+                          {shop.shop_name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="mt-2 text-xs text-[var(--ink-muted)]">
+                    Current shop: {member.assigned_shop_name || "Not assigned"}
+                  </p>
                   <div className="mt-3 grid gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 text-sm">
                     <PermissionToggle
                       label="Can create bills"

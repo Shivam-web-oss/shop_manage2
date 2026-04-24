@@ -1,4 +1,5 @@
-import LoginPage from './src/login'
+import PublicWelcome from "@/app/components/public/public-welcome"
+
 export default function Home() {
-   return <LoginPage />
+  return <PublicWelcome />
 }

@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
+import { useUiLanguage } from "@/app/components/ui/ui-language"
 
 const INITIAL_FORM = {
   companyName: "",
@@ -13,6 +14,7 @@ const INITIAL_FORM = {
 
 export default function CreateShopPage() {
   const router = useRouter()
+  const { copy } = useUiLanguage()
   const [form, setForm] = useState(INITIAL_FORM)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -24,7 +26,7 @@ export default function CreateShopPage() {
     setMessage("")
 
     if (!form.companyName.trim() || !form.shopName.trim() || !form.location.trim()) {
-      setError("Company name, shop name, and location are required.")
+      setError(copy("Company name, shop name, and location are required.", "कंपनी का नाम, दुकान का नाम और जगह भरना जरूरी है।"))
       return
     }
 
@@ -43,17 +45,17 @@ export default function CreateShopPage() {
 
       const data = await response.json().catch(() => ({}))
       if (!response.ok) {
-        throw new Error(data.message || "Unable to create shop.")
+        throw new Error(data.message || copy("Unable to create shop.", "दुकान नहीं बन सकी।"))
       }
 
-      setMessage("Shop created successfully.")
+      setMessage(copy("Shop created successfully.", "दुकान सफलतापूर्वक बन गई।"))
       setForm(INITIAL_FORM)
       setTimeout(() => {
         router.replace("/business")
         router.refresh()
       }, 700)
     } catch (submitError) {
-      setError(submitError.message || "Unable to create shop.")
+      setError(submitError.message || copy("Unable to create shop.", "दुकान नहीं बन सकी।"))
     } finally {
       setLoading(false)
     }
@@ -62,30 +64,35 @@ export default function CreateShopPage() {
   return (
     <div className="mx-auto max-w-3xl">
       <section className="ui-card rounded-3xl p-6">
-        <p className="text-xs uppercase tracking-[0.2em] text-[var(--accent-deep)]">Shop Setup</p>
-        <h1 className="mt-3 text-3xl font-semibold text-[var(--foreground)]">Create New Shop</h1>
-        <p className="mt-2 text-sm text-[var(--ink-muted)]">
-          Fill this once. You can edit or delete the shop anytime from shop details.
+        <p className="ui-eyebrow">{copy("Shop Setup", "दुकान की शुरुआत")}</p>
+        <h1 className="mt-3 text-3xl font-semibold text-[var(--foreground)]">
+          {copy("Add a new shop", "नई दुकान जोड़ें")}
+        </h1>
+        <p className="mt-2 text-base text-[var(--ink-muted)]">
+          {copy(
+            "Fill these simple details once. You can change them later anytime.",
+            "यह आसान जानकारी एक बार भरें। बाद में कभी भी बदल सकते हैं।"
+          )}
         </p>
 
         <form onSubmit={handleSubmit} className="mt-5 space-y-3">
           <input
             className="ui-input"
-            placeholder="Company name"
+            placeholder={copy("Company name", "कंपनी का नाम")}
             value={form.companyName}
             onChange={(event) => setForm((previous) => ({ ...previous, companyName: event.target.value }))}
             required
           />
           <input
             className="ui-input"
-            placeholder="Shop name"
+            placeholder={copy("Shop name", "दुकान का नाम")}
             value={form.shopName}
             onChange={(event) => setForm((previous) => ({ ...previous, shopName: event.target.value }))}
             required
           />
           <input
             className="ui-input"
-            placeholder="Location"
+            placeholder={copy("Location", "जगह")}
             value={form.location}
             onChange={(event) => setForm((previous) => ({ ...previous, location: event.target.value }))}
             required
@@ -93,7 +100,7 @@ export default function CreateShopPage() {
           <textarea
             className="ui-textarea"
             rows={4}
-            placeholder="Description (optional)"
+            placeholder={copy("Short note (optional)", "छोटा नोट (जरूरी नहीं)")}
             value={form.description}
             onChange={(event) => setForm((previous) => ({ ...previous, description: event.target.value }))}
           />
@@ -107,10 +114,10 @@ export default function CreateShopPage() {
               disabled={loading}
               className="ui-btn-primary px-5 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-70"
             >
-              {loading ? "Creating..." : "Create Shop"}
+              {loading ? copy("Creating...", "बन रही है...") : copy("Create Shop", "दुकान बनाएं")}
             </button>
             <Link href="/business" className="ui-btn-secondary px-5 py-3 text-sm">
-              Back to Business
+              {copy("Back to Home", "होम पर वापस")}
             </Link>
           </div>
         </form>

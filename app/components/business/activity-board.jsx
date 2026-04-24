@@ -1,40 +1,82 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useEffect, useState } from "react"
+import { useShopScope } from "./use-shop-scope"
 
 function currency(value) {
-  return `₹${Number(value ?? 0).toFixed(2)}`
+  return `â‚¹${Number(value ?? 0).toFixed(2)}`
 }
 
 export default function ActivityBoard({ limit = 20, compact = false }) {
+  const {
+    shops,
+    activeShop,
+    activeShopId,
+    shopLocked,
+    loadingShops,
+    shopError,
+  } = useShopScope()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [data, setData] = useState(null)
-
-  const loadData = useCallback(async () => {
-    setLoading(true)
-    setError("")
-
-    try {
-      const response = await fetch(`/api/dashboard/activity?limit=${limit}`, { cache: "no-store" })
-      const payload = await response.json().catch(() => ({}))
-      if (!response.ok) {
-        throw new Error(payload.message || "Unable to load dashboard activity.")
-      }
-      setData(payload)
-    } catch (loadError) {
-      setError(loadError.message || "Unable to load dashboard activity.")
-    } finally {
-      setLoading(false)
-    }
-  }, [limit])
+  const [selectedShopId, setSelectedShopId] = useState("")
 
   useEffect(() => {
-    loadData()
-  }, [loadData])
+    if (loadingShops) {
+      return
+    }
 
-  if (loading) {
+    setSelectedShopId((previous) => {
+      if (shopLocked) {
+        return activeShopId
+      }
+
+      if (previous && shops.some((shop) => shop.id === previous)) {
+        return previous
+      }
+
+      return ""
+    })
+  }, [activeShopId, loadingShops, shopLocked, shops])
+
+  useEffect(() => {
+    if (loadingShops) {
+      return
+    }
+
+    async function loadData() {
+      setLoading(true)
+      setError("")
+
+      try {
+        const searchParams = new URLSearchParams({ limit: String(limit) })
+        const scopeShopId = shopLocked ? activeShopId : selectedShopId
+        if (scopeShopId) {
+          searchParams.set("shopId", scopeShopId)
+        }
+
+        const response = await fetch(`/api/dashboard/activity?${searchParams.toString()}`, { cache: "no-store" })
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          throw new Error(payload.message || "Unable to load dashboard activity.")
+        }
+        setData(payload)
+      } catch (loadError) {
+        setError(loadError.message || "Unable to load dashboard activity.")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadData()
+  }, [activeShopId, limit, loadingShops, selectedShopId, shopLocked])
+
+  if (loadingShops || loading) {
     return <p className="text-sm text-[var(--ink-muted)]">Loading activity...</p>
+  }
+
+  if (shopError) {
+    return <p className="text-sm text-red-600">{shopError}</p>
   }
 
   if (error) {
@@ -47,6 +89,31 @@ export default function ActivityBoard({ limit = 20, compact = false }) {
 
   return (
     <section className="space-y-6">
+      <div className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-white p-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-sm font-medium text-[var(--foreground)]">Report Scope</p>
+          <p className="text-sm text-[var(--ink-muted)]">
+            {shopLocked && activeShop ? `Showing activity for ${activeShop.shop_name}.` : "Choose one shop or review all accessible shops."}
+          </p>
+        </div>
+        <label className="block sm:min-w-72">
+          <span className="mb-2 block text-sm font-medium text-[var(--foreground)]">Shop</span>
+          <select
+            className="ui-select"
+            value={shopLocked ? activeShopId : selectedShopId}
+            onChange={(event) => setSelectedShopId(event.target.value)}
+            disabled={shopLocked || shops.length === 0}
+          >
+            {!shopLocked ? <option value="">All accessible shops</option> : null}
+            {shops.map((shop) => (
+              <option key={shop.id} value={shop.id}>
+                {shop.shop_name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
       <div className={`grid gap-3 ${compact ? "sm:grid-cols-2 lg:grid-cols-3" : "sm:grid-cols-2 xl:grid-cols-6"}`}>
         <MetricCard label="Shops" value={metrics.shops_count ?? 0} />
         <MetricCard label="Products" value={metrics.products_count ?? 0} />

@@ -1,12 +1,22 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { useShopScope } from "@/app/components/business/use-shop-scope"
 
 function currency(value) {
-  return `₹${Number(value ?? 0).toFixed(2)}`
+  return `â‚¹${Number(value ?? 0).toFixed(2)}`
 }
 
 export default function BillCreator() {
+  const {
+    shops,
+    activeShop,
+    activeShopId,
+    setActiveShopId,
+    shopLocked,
+    loadingShops,
+    shopError,
+  } = useShopScope()
   const [products, setProducts] = useState([])
   const [search, setSearch] = useState("")
   const [cart, setCart] = useState([])
@@ -20,11 +30,17 @@ export default function BillCreator() {
   const [message, setMessage] = useState("")
   const [savedBill, setSavedBill] = useState(null)
 
-  async function loadProducts() {
+  const loadProducts = useCallback(async (shopId) => {
+    if (!shopId) {
+      setProducts([])
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
     setError("")
     try {
-      const response = await fetch("/api/products", { cache: "no-store" })
+      const response = await fetch(`/api/products?shopId=${encodeURIComponent(shopId)}`, { cache: "no-store" })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) {
         throw new Error(data.message || "Failed to load products.")
@@ -35,11 +51,16 @@ export default function BillCreator() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
-    loadProducts()
-  }, [])
+    if (loadingShops) {
+      return
+    }
+
+    setCart([])
+    loadProducts(activeShopId)
+  }, [activeShopId, loadingShops, loadProducts])
 
   const filteredProducts = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -126,6 +147,11 @@ export default function BillCreator() {
   const grandTotal = taxable + gstAmount
 
   async function submitBill() {
+    if (!activeShopId) {
+      setError("Select a shop before creating a bill.")
+      return
+    }
+
     if (!cart.length) {
       setError("Please add at least one item.")
       return
@@ -140,6 +166,7 @@ export default function BillCreator() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          shop_id: activeShopId,
           customer_name: customerName.trim() || "Walk-in",
           customer_phone: customerPhone.trim() || null,
           discount_percent: Number(discountPercent) || 0,
@@ -165,7 +192,7 @@ export default function BillCreator() {
       setCustomerPhone("")
       setDiscountPercent(0)
       setPaymentMethod("cash")
-      await loadProducts()
+      await loadProducts(activeShopId)
     } catch (submitError) {
       setError(submitError.message || "Unable to create bill.")
     } finally {
@@ -179,6 +206,28 @@ export default function BillCreator() {
         <h2 className="text-2xl font-semibold text-[var(--foreground)]">Select Products</h2>
         <p className="mt-2 text-sm text-[var(--ink-muted)]">Search and click a product to add it to the bill.</p>
 
+        <div className="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-[var(--foreground)]">Shop</span>
+            <select
+              className="ui-select"
+              value={activeShopId}
+              onChange={(event) => setActiveShopId(event.target.value)}
+              disabled={shopLocked || loadingShops || shops.length === 0}
+            >
+              {shops.length === 0 ? <option value="">No shop available</option> : null}
+              {shops.map((shop) => (
+                <option key={shop.id} value={shop.id}>
+                  {shop.shop_name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="text-sm text-[var(--ink-muted)]">
+            {activeShop ? `Creating bills for ${activeShop.shop_name}.` : "Pick a shop before adding products."}
+          </div>
+        </div>
+
         <input
           className="ui-input mt-4"
           placeholder="Search by product name or SKU"
@@ -186,7 +235,11 @@ export default function BillCreator() {
           onChange={(event) => setSearch(event.target.value)}
         />
 
-        {loading ? (
+        {shopError ? <p className="mt-4 text-sm text-red-600">{shopError}</p> : null}
+
+        {!loadingShops && shops.length === 0 ? (
+          <p className="mt-5 text-sm text-[var(--ink-muted)]">No shop is available for billing yet.</p>
+        ) : loadingShops || loading ? (
           <p className="mt-5 text-sm text-[var(--ink-muted)]">Loading products...</p>
         ) : filteredProducts.length === 0 ? (
           <p className="mt-5 text-sm text-[var(--ink-muted)]">No products found.</p>
@@ -202,7 +255,7 @@ export default function BillCreator() {
                 <p className="font-medium text-[var(--foreground)]">{product.name}</p>
                 <p className="mt-1 text-xs text-[var(--ink-muted)]">SKU: {product.sku || "N/A"}</p>
                 <p className="mt-2 text-sm text-[var(--foreground)]">
-                  {currency(product.price)} • Stock {Number(product.quantity ?? 0)}
+                  {currency(product.price)} â€¢ Stock {Number(product.quantity ?? 0)}
                 </p>
               </button>
             ))}
@@ -306,7 +359,7 @@ export default function BillCreator() {
         <button
           type="button"
           onClick={submitBill}
-          disabled={submitting}
+          disabled={submitting || loadingShops || shops.length === 0}
           className="ui-btn-primary mt-5 w-full px-5 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-70"
         >
           {submitting ? "Creating Bill..." : "Create Bill"}
