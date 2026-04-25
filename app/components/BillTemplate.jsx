@@ -1,384 +1,744 @@
-"use client";
-import { useRef, useState } from "react";
+"use client"
 
-const B = "#2e4799";
-const BG = "#eef1fa";
+import { useMemo, useRef } from "react"
 
-const emptyRow = () => ({ p: "", q: "", r: "" });
-const toNum = (v) => parseFloat(v) || 0;
-const fmt = (n) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Keep a minimum number of table rows so the printed bill always has a balanced layout.
+const MIN_PRINT_ROWS = 8
 
-const ones = ["","One","Two","Three","Four","Five","Six","Seven","Eight","Nine","Ten","Eleven","Twelve","Thirteen","Fourteen","Fifteen","Sixteen","Seventeen","Eighteen","Nineteen"];
-const tens = ["","","Twenty","Thirty","Forty","Fifty","Sixty","Seventy","Eighty","Ninety"];
-function n2w(n) {
-  n = Math.floor(n);
-  if (!n) return "Zero";
-  if (n < 20) return ones[n];
-  if (n < 100) return tens[Math.floor(n/10)] + (n%10 ? " "+ones[n%10] : "");
-  if (n < 1000) return ones[Math.floor(n/100)] + " Hundred" + (n%100 ? " "+n2w(n%100) : "");
-  if (n < 100000) return n2w(Math.floor(n/1000)) + " Thousand" + (n%1000 ? " "+n2w(n%1000) : "");
-  if (n < 10000000) return n2w(Math.floor(n/100000)) + " Lakh" + (n%100000 ? " "+n2w(n%100000) : "");
-  return n2w(Math.floor(n/10000000)) + " Crore" + (n%10000000 ? " "+n2w(n%10000000) : "");
+// Reuse one currency formatter everywhere so all rupee values look the same.
+const currencyFormatter = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+
+// These styles are injected into the page and also into the print popup window.
+const PRINT_STYLES = `
+  :root {
+    color-scheme: light;
+  }
+
+  body.invoice-print-body {
+    margin: 0;
+    padding: 24px;
+    background: #eef4f8;
+    font-family: "Segoe UI", Arial, sans-serif;
+    color: #0f172a;
+  }
+
+  .invoice-shell {
+    width: 100%;
+  }
+
+  .invoice-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .invoice-button {
+    border: none;
+    border-radius: 999px;
+    background: #1f7a53;
+    color: #ffffff;
+    cursor: pointer;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 12px 20px;
+  }
+
+  .invoice-sheet {
+    width: 100%;
+    max-width: 960px;
+    margin: 0 auto;
+    background: #ffffff;
+    border: 1px solid #0f172a;
+    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
+  }
+
+  .invoice-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 28px 28px 20px;
+    border-bottom: 2px solid #0f172a;
+    background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%);
+  }
+
+  .invoice-eyebrow {
+    margin: 0 0 8px;
+    color: #1f7a53;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+
+  .invoice-title {
+    margin: 0;
+    font-size: 30px;
+    line-height: 1.1;
+  }
+
+  .invoice-subtitle {
+    margin: 8px 0 0;
+    color: #334155;
+    font-size: 18px;
+    font-weight: 600;
+  }
+
+  .invoice-address {
+    margin: 10px 0 0;
+    color: #475569;
+    font-size: 14px;
+    line-height: 1.6;
+    max-width: 520px;
+  }
+
+  .invoice-badge {
+    min-width: 200px;
+    border: 1px solid #cbd5e1;
+    border-radius: 18px;
+    padding: 16px 18px;
+    background: #ffffff;
+  }
+
+  .invoice-badge-label {
+    margin: 0;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .invoice-badge-value {
+    margin: 10px 0 0;
+    font-size: 24px;
+    font-weight: 700;
+  }
+
+  .invoice-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0;
+    border-bottom: 1px solid #cbd5e1;
+  }
+
+  .invoice-meta-card {
+    padding: 18px 28px;
+    border-right: 1px solid #e2e8f0;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .invoice-meta-card:nth-child(2n) {
+    border-right: none;
+  }
+
+  .invoice-meta-label {
+    margin: 0;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .invoice-meta-value {
+    margin: 10px 0 0;
+    color: #0f172a;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.5;
+    word-break: break-word;
+  }
+
+  .invoice-table-wrap {
+    padding: 22px 28px 0;
+  }
+
+  .invoice-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+
+  .invoice-table th,
+  .invoice-table td {
+    border: 1px solid #cbd5e1;
+    padding: 12px 10px;
+    font-size: 14px;
+    vertical-align: top;
+  }
+
+  .invoice-table th {
+    background: #0f172a;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .invoice-col-no {
+    width: 58px;
+    text-align: center;
+  }
+
+  .invoice-col-qty {
+    width: 90px;
+    text-align: center;
+  }
+
+  .invoice-col-rate,
+  .invoice-col-amount {
+    width: 140px;
+    text-align: right;
+  }
+
+  .invoice-empty-row td {
+    height: 46px;
+  }
+
+  .invoice-summary-wrap {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+    gap: 24px;
+    padding: 22px 28px 0;
+  }
+
+  .invoice-words-card,
+  .invoice-summary-card {
+    border: 1px solid #cbd5e1;
+    border-radius: 20px;
+    background: #f8fafc;
+    padding: 18px 20px;
+  }
+
+  .invoice-summary-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 9px 0;
+    font-size: 14px;
+  }
+
+  .invoice-summary-row + .invoice-summary-row {
+    border-top: 1px solid #e2e8f0;
+  }
+
+  .invoice-summary-total {
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .invoice-words-label {
+    margin: 0 0 10px;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .invoice-words-value {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.6;
+  }
+
+  .invoice-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 22px 28px 28px;
+    align-items: flex-end;
+  }
+
+  .invoice-payment {
+    color: #475569;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .invoice-signature {
+    min-width: 260px;
+    text-align: right;
+  }
+
+  .invoice-signature-company {
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .invoice-signature-line {
+    margin: 42px 0 8px auto;
+    width: 220px;
+    border-top: 1px solid #0f172a;
+  }
+
+  .invoice-signature-label {
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  @media (max-width: 840px) {
+    body.invoice-print-body {
+      padding: 12px;
+    }
+
+    .invoice-header,
+    .invoice-footer {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .invoice-meta,
+    .invoice-summary-wrap {
+      grid-template-columns: 1fr;
+    }
+
+    .invoice-meta-card {
+      border-right: none;
+    }
+
+    .invoice-badge,
+    .invoice-signature {
+      min-width: 0;
+      width: 100%;
+    }
+
+    .invoice-signature {
+      text-align: left;
+    }
+
+    .invoice-signature-line {
+      margin-left: 0;
+    }
+  }
+
+  @media print {
+    body.invoice-print-body {
+      padding: 0;
+      background: #ffffff;
+    }
+
+    .invoice-sheet {
+      max-width: none;
+      box-shadow: none;
+      border: none;
+    }
+  }
+`
+
+// Convert any number-like value into a properly formatted INR currency string.
+function formatCurrency(value) {
+  return currencyFormatter.format(Number(value ?? 0))
 }
 
-// Reusable editable input — transparent, no border, just text
-function EI({ value, onChange, placeholder = "", style = {}, type = "text" }) {
-  return (
-    <input
-      type={type}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      style={{
-        border: "none", outline: "none", background: "transparent",
-        fontFamily: "inherit", color: "inherit", width: "100%", padding: 0,
-        ...style,
-      }}
-      onFocus={e => (e.target.style.background = "rgba(46,71,153,0.09)")}
-      onBlur={e => (e.target.style.background = "transparent")}
-    />
-  );
+// Show only the date part of a value in Indian date format.
+function formatDate(value) {
+  // If no date is provided, we fall back to the current date.
+  const date = value ? new Date(value) : new Date()
+
+  // Guard against invalid date values so the UI does not break.
+  if (Number.isNaN(date.getTime())) {
+    return "N/A"
+  }
+
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  })
 }
 
-// Dashed-underline field (for bill meta like Name, Address etc.)
-function Field({ label, value, onChange, placeholder = "", fullWidth = false, type = "text" }) {
-  return (
-    <div style={{ display:"flex", alignItems:"center", gap:5, gridColumn: fullWidth ? "1/-1" : undefined }}>
-      <span style={{ fontWeight:700, fontSize:11.5, whiteSpace:"nowrap", color:"#222" }}>{label}</span>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        style={{
-          border:"none", borderBottom:`1px dashed ${B}`, outline:"none",
-          background:"transparent", fontFamily:"inherit", fontSize:12,
-          color:"#111", flex:1, padding:"0 3px",
-        }}
-        onFocus={e => { e.target.style.background="rgba(46,71,153,0.07)"; e.target.style.borderRadius="2px 2px 0 0"; }}
-        onBlur={e => { e.target.style.background="transparent"; e.target.style.borderRadius="0"; }}
-      />
-    </div>
-  );
+// Show both date and time for fields such as bill creation time.
+function formatDateTime(value) {
+  const date = value ? new Date(value) : new Date()
+  if (Number.isNaN(date.getTime())) {
+    return "N/A"
+  }
+
+  return date.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
 }
 
-export default function BillTemplate({ initialData = {} }) {
-  const printRef = useRef(null);
+// Round money values to 2 decimal places so totals stay predictable.
+function roundAmount(value) {
+  return Number(Number(value ?? 0).toFixed(2))
+}
 
-  // ── Shop info (all editable) ──
-  const [propr,    setPropr]    = useState(initialData.propr    ?? "प्रोप्रा. रवि कनकने");
-  const [gstin,    setGstin]    = useState(initialData.gstin    ?? "GSTIN : 23AXXPK2953L1ZU");
-  const [shopPhone,setShopPhone]= useState(initialData.shopPhone?? "मो. 9300134968");
-  const [shop1,    setShop1]    = useState(initialData.shop1    ?? "यूनियन कम्युनिकेशन");
-  const [andText,  setAndText]  = useState(initialData.andText  ?? "एण्ड");
-  const [shop2,    setShop2]    = useState(initialData.shop2    ?? "गृहशोभा इलेक्ट्रॉनिक एंड फर्नीचर");
-  const [shopAddr, setShopAddr] = useState(initialData.shopAddr ?? "यूनियन बैंक के पास, साईं मंदिर, खितोला बाजार");
-  const [finText,  setFinText]  = useState(initialData.finText  ?? "फायनेंस सुविधा उपलब्ध");
-  const [forText,  setForText]  = useState(initialData.forText  ?? "For– यूनियन कम्युनिकेशन");
-  const [sigText,  setSigText]  = useState(initialData.sigText  ?? "Prop/Authorised Signature");
+// Convert raw bill items into safe, printable rows and pad empty rows for printing.
+function normalizePrintRows(items = []) {
+  const normalizedRows = items.map((item) => {
+    // Pull the important values from each item and make sure they are numbers.
+    const quantity = Number(item?.quantity ?? 0)
+    const rate = Number(item?.unit_price ?? 0)
+    const amount = Number(item?.total_price ?? quantity * rate)
 
-  // ── Table headers ──
-  const [hNo,  setHNo]  = useState("No.");
-  const [hPar, setHPar] = useState("Particular");
-  const [hQty, setHQty] = useState("Qty");
-  const [hRate,setHRate]= useState("Rate");
-  const [hAmt, setHAmt] = useState("Amount");
+    return {
+      description: String(item?.product_name ?? "").trim(),
+      quantity,
+      rate,
+      amount,
+    }
+  })
 
-  // ── Tax labels ──
-  const [cgstLbl, setCgstLbl] = useState("CGST 9%");
-  const [sgstLbl, setSgstLbl] = useState("SGST 9%");
-  const [totalLbl,setTotalLbl]= useState("Total");
-  const [inWordLbl,setInWordLbl]=useState("In Word :");
-  const [cgstRate, setCgstRate]= useState(9);
-  const [sgstRate, setSgstRate]= useState(9);
+  // Add blank rows so short bills still fill the printed table nicely.
+  while (normalizedRows.length < MIN_PRINT_ROWS) {
+    normalizedRows.push({
+      description: "",
+      quantity: null,
+      rate: null,
+      amount: null,
+    })
+  }
 
-  // ── Footer notes ──
-  const [notes, setNotes] = useState(initialData.notes ?? [
-    "नोट– फायनेंस पे किस्त समय पर जमा करें।",
-    "किस्त बाउंस होती है तो इसके लिये ग्राहक स्वयं जिम्मेदार होगा।",
-    "बिका हुआ माल न बदला जारेगा न ही वापिस होगा।",
-    "किसी भी समान पे वारंटी सर्विस सेंटर कि होगी। ग्राहक को स्वयं जाना पड़ेगा।",
-  ]);
+  return normalizedRows
+}
 
-  // ── Bill meta ──
-  const [billNo,  setBillNo]  = useState(initialData.billNo  ?? "");
-  const [date,    setDate]    = useState(initialData.date    ?? new Date().toISOString().split("T")[0]);
-  const [cname,   setCname]   = useState(initialData.cname   ?? "");
-  const [caddr,   setCaddr]   = useState(initialData.caddr   ?? "");
-  const [cmobile, setCmobile] = useState(initialData.cmobile ?? "");
+// Turn values like "credit_card" into "Credit Card" for a friendlier display.
+function capitalizeWords(value) {
+  return String(value ?? "")
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ")
+}
 
-  // ── Rows ──
-  const [rows, setRows] = useState(initialData.rows ?? Array.from({length:10}, emptyRow));
-  const updateRow = (i, f, v) => setRows(prev => prev.map((r,idx) => idx===i ? {...r,[f]:v} : r));
-  const addRow    = () => setRows(prev => [...prev, emptyRow()]);
-  const removeRow = (i) => setRows(prev => prev.filter((_,idx) => idx!==i));
+// Normalize payment mode text and keep common values like UPI nicely formatted.
+function formatPaymentMethod(value) {
+  const normalizedValue = String(value ?? "").trim()
+  if (!normalizedValue) {
+    return "Cash"
+  }
 
-  // ── Calculations ──
-  const subtotal = rows.reduce((s,r) => s + toNum(r.q)*toNum(r.r), 0);
-  const cgst = subtotal * (cgstRate/100);
-  const sgst = subtotal * (sgstRate/100);
-  const total = subtotal + cgst + sgst;
-  const inWords = total > 0 ? n2w(total) + " Rupees Only" : "—";
+  if (normalizedValue.toLowerCase() === "upi") {
+    return "UPI"
+  }
 
-  // ── Print ──
-  const handlePrint = () => {
-    const content = printRef.current.innerHTML;
-    const win = window.open("","_blank","width=870,height=920");
-    win.document.write(`<!DOCTYPE html><html><head>
-      <meta charset="UTF-8"/><title>Bill #${billNo}</title>
-      <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;600;700;900&display=swap" rel="stylesheet"/>
-      <style>
-        *{box-sizing:border-box;margin:0;padding:0;}
-        body{font-family:'Noto Sans Devanagari',sans-serif;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-        .bw{max-width:780px;margin:0 auto;border:2px solid #2e4799;}
-        input{border:none!important;outline:none!important;background:transparent!important;width:100%;font-family:inherit;}
-        .no-print{display:none!important;}
-        @page{size:A4;margin:8mm;}
-      </style></head><body><div class="bw">${content}</div></body></html>`);
-    win.document.close();
-    setTimeout(()=>{win.focus();win.print();win.close();},800);
-  };
+  return capitalizeWords(normalizedValue)
+}
 
-  const tdIn = (val, onChange, align="left", type="text") => ({
-    value: val, onChange: e => onChange(e.target.value), type,
-    style:{
-      border:"none", outline:"none", background:"transparent",
-      fontFamily:"inherit", fontSize:11.5, color:"#111",
-      width:"100%", padding:"2px 2px", textAlign: align,
-    },
-  });
+// Word lookup for numbers below twenty.
+const ONES = [
+  "",
+  "One",
+  "Two",
+  "Three",
+  "Four",
+  "Five",
+  "Six",
+  "Seven",
+  "Eight",
+  "Nine",
+  "Ten",
+  "Eleven",
+  "Twelve",
+  "Thirteen",
+  "Fourteen",
+  "Fifteen",
+  "Sixteen",
+  "Seventeen",
+  "Eighteen",
+  "Nineteen",
+]
+
+// Word lookup for multiples of ten.
+const TENS = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"]
+
+// Convert a number from 0 to 999 into words.
+function numberToWordsUnderOneThousand(value) {
+  const normalizedValue = Math.floor(Math.abs(value))
+
+  if (normalizedValue < 20) {
+    return ONES[normalizedValue]
+  }
+
+  if (normalizedValue < 100) {
+    return `${TENS[Math.floor(normalizedValue / 10)]}${normalizedValue % 10 ? ` ${ONES[normalizedValue % 10]}` : ""}`
+  }
+
+  return `${ONES[Math.floor(normalizedValue / 100)]} Hundred${
+    normalizedValue % 100 ? ` ${numberToWordsUnderOneThousand(normalizedValue % 100)}` : ""
+  }`
+}
+
+// Convert a whole number into Indian numbering words like Thousand, Lakh, and Crore.
+function numberToWordsIndian(value) {
+  const normalizedValue = Math.floor(Math.abs(value))
+
+  if (normalizedValue === 0) {
+    return "Zero"
+  }
+
+  const units = [
+    { value: 10000000, label: "Crore" },
+    { value: 100000, label: "Lakh" },
+    { value: 1000, label: "Thousand" },
+  ]
+
+  let remainingValue = normalizedValue
+  const parts = []
+
+  for (const unit of units) {
+    if (remainingValue >= unit.value) {
+      const unitAmount = Math.floor(remainingValue / unit.value)
+      parts.push(`${numberToWordsUnderOneThousand(unitAmount)} ${unit.label}`)
+      remainingValue %= unit.value
+    }
+  }
+
+  if (remainingValue > 0) {
+    parts.push(numberToWordsUnderOneThousand(remainingValue))
+  }
+
+  return parts.join(" ").trim()
+}
+
+// Convert a final money amount into a sentence such as "One Hundred Rupees Only".
+function amountToWords(value) {
+  const roundedValue = roundAmount(value)
+  // Separate rupees and paise so both can be written correctly.
+  const wholeRupees = Math.floor(roundedValue)
+  const paise = Math.round((roundedValue - wholeRupees) * 100)
+
+  let result = `${numberToWordsIndian(wholeRupees)} Rupees`
+  if (paise > 0) {
+    result += ` and ${numberToWordsIndian(paise)} Paise`
+  }
+
+  return `${result} Only`
+}
+
+// Create a short readable bill number from the raw bill id.
+function getBillNumber(value) {
+  const normalizedValue = String(value ?? "").trim()
+  if (!normalizedValue) {
+    return "N/A"
+  }
+
+  return normalizedValue.slice(0, 8).toUpperCase()
+}
+
+// `bill` contains all invoice data to display.
+// `showActions` decides whether the print button should be shown.
+export default function BillTemplate({ bill, showActions = true }) {
+  // This ref points to the invoice DOM so we can copy it into the print window.
+  const printRef = useRef(null)
+
+  // Prepare printable rows once and recalculate only when the bill items change.
+  const printableRows = useMemo(() => normalizePrintRows(bill?.items ?? []), [bill?.items])
+
+  // If there is no bill yet, render nothing.
+  if (!bill) {
+    return null
+  }
+
+  // Build display-friendly values with safe fallbacks so missing fields do not show as undefined.
+  const companyName = String(bill.company_name ?? "").trim() || "Business"
+  const shopName = String(bill.shop_name ?? "").trim()
+  const shopLocation = String(bill.shop_location ?? "").trim()
+  const customerName = String(bill.customer_name ?? "").trim() || "Walk-in"
+  const customerPhone = String(bill.customer_phone ?? "").trim() || "N/A"
+  const customerAddress = String(bill.customer_address ?? "").trim() || "N/A"
+  const subtotal = roundAmount(bill.subtotal ?? 0)
+  const discountAmount = roundAmount(bill.discount_amount ?? 0)
+  const taxableAmount = roundAmount(bill.taxable_amount ?? subtotal - discountAmount)
+  const gstAmount = roundAmount(bill.gst_amount ?? 0)
+  const cgstAmount = roundAmount(bill.cgst_amount ?? gstAmount / 2)
+  const sgstAmount = roundAmount(bill.sgst_amount ?? gstAmount - cgstAmount)
+  const totalAmount = roundAmount(bill.total_amount ?? taxableAmount + gstAmount)
+  const amountInWords = amountToWords(totalAmount)
+  const billNumber = getBillNumber(bill.id)
+  const paymentMethod = formatPaymentMethod(bill.payment_method)
+
+  // Show the shop name as a subtitle only when it is different from the company name.
+  const secondaryTitle = shopName && shopName !== companyName ? shopName : ""
+
+  // Open a temporary browser window, copy the invoice HTML into it, and trigger printing.
+  function handlePrint() {
+    if (!printRef.current) {
+      return
+    }
+
+    // Create a popup window that will contain only the printable invoice.
+    const printWindow = window.open("", "_blank", "width=980,height=720")
+    if (!printWindow) {
+      return
+    }
+
+    printWindow.document.write(`<!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8" />
+          <title>Bill ${billNumber}</title>
+          <style>${PRINT_STYLES}</style>
+        </head>
+        <body class="invoice-print-body">
+          ${printRef.current.outerHTML}
+        </body>
+      </html>`)
+    printWindow.document.close()
+
+    // Give the browser a short moment to finish rendering before calling print.
+    window.setTimeout(() => {
+      printWindow.focus()
+      printWindow.print()
+      printWindow.close()
+    }, 300)
+  }
 
   return (
-    <div style={{ minHeight:"100vh", background:"#c9d4e8", padding:"16px 10px",
-      display:"flex", flexDirection:"column", alignItems:"center",
-      fontFamily:"'Noto Sans Devanagari',sans-serif" }}>
+    <div className="invoice-shell">
+      {/* Use the same CSS for on-screen preview and the copied print window. */}
+      <style>{PRINT_STYLES}</style>
 
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;600;700;900&display=swap');
-        input[type=number]::-webkit-inner-spin-button,
-        input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
-        input[type=number]{-moz-appearance:textfield;}
-        input:hover{background:rgba(46,71,153,0.06)!important;border-radius:2px;}
-        @media print{.no-print{display:none!important;}}
-      `}</style>
+      {/* The action bar is optional because some places may want a read-only bill view. */}
+      {showActions ? (
+        <div className="invoice-toolbar">
+          <button type="button" onClick={handlePrint} className="invoice-button">
+            Print Bill
+          </button>
+        </div>
+      ) : null}
 
-      {/* Toolbar */}
-      <div className="no-print" style={{ display:"flex", gap:10, marginBottom:14, width:"100%", maxWidth:780, justifyContent:"flex-end" }}>
-        <button onClick={addRow} style={{ padding:"6px 16px", background:B, color:"#fff", border:"none", borderRadius:5, fontSize:13, cursor:"pointer", fontFamily:"inherit", fontWeight:600 }}>+ Add Row</button>
-        <button onClick={handlePrint} style={{ padding:"6px 18px", background:"#1a7a4a", color:"#fff", border:"none", borderRadius:5, fontSize:13, cursor:"pointer", fontFamily:"inherit", fontWeight:600 }}>🖨 Print Bill</button>
-      </div>
-
-      {/* ══ BILL ══ */}
-      <div ref={printRef} style={{ background:"#fff", width:"100%", maxWidth:780, border:`2px solid ${B}`, fontFamily:"'Noto Sans Devanagari',sans-serif" }}>
-
-        {/* ── HEADER ── */}
-        <div style={{ borderBottom:`2px solid ${B}` }}>
-          {/* Meta row */}
-          <div style={{ display:"flex", justifyContent:"space-between", gap:4, fontSize:10, color:B, fontWeight:700, padding:"5px 10px 2px" }}>
-            <EI value={propr}     onChange={setPropr}     style={{ fontSize:10, fontWeight:700, color:B, textAlign:"left",   flex:1 }}/>
-            <EI value={gstin}     onChange={setGstin}     style={{ fontSize:10, fontWeight:700, color:B, textAlign:"center", flex:1 }}/>
-            <EI value={shopPhone} onChange={setShopPhone} style={{ fontSize:10, fontWeight:700, color:B, textAlign:"right",  flex:1 }}/>
+      {/* This full section is what gets printed when the user clicks "Print Bill". */}
+      <div ref={printRef} className="invoice-sheet">
+        {/* Top section with business identity and the main bill badge. */}
+        <div className="invoice-header">
+          <div>
+            <p className="invoice-eyebrow">Tax Invoice</p>
+            <h2 className="invoice-title">{companyName}</h2>
+            {secondaryTitle ? <p className="invoice-subtitle">{secondaryTitle}</p> : null}
+            {shopLocation ? <p className="invoice-address">{shopLocation}</p> : null}
           </div>
 
-          {/* Shop name */}
-          <div style={{ textAlign:"center", padding:"2px 8px 0" }}>
-            <div style={{ fontSize:30, fontWeight:900, color:B, lineHeight:1.1 }}>
-              <EI value={shop1} onChange={setShop1} style={{ fontSize:30, fontWeight:900, color:B, textAlign:"center" }}/>
-            </div>
-            <div style={{ fontSize:13, fontWeight:700, color:B, display:"flex", alignItems:"center", justifyContent:"center", gap:4 }}>
-              —&nbsp;
-              <EI value={andText} onChange={setAndText} style={{ fontSize:13, fontWeight:700, color:B, textAlign:"center", width:70 }}/>
-              &nbsp;—
-            </div>
-            <div style={{ fontSize:19, fontWeight:800, color:B }}>
-              <EI value={shop2} onChange={setShop2} style={{ fontSize:19, fontWeight:800, color:B, textAlign:"center" }}/>
-            </div>
-          </div>
-
-          {/* Address strip */}
-          <div style={{ background:B, margin:"5px 8px 4px", padding:"4px 8px" }}>
-            <EI value={shopAddr} onChange={setShopAddr} style={{ fontSize:11, fontWeight:700, color:"#fff", textAlign:"center" }}/>
-          </div>
-
-          {/* Product SVG icons */}
-          <div style={{ display:"flex", justifyContent:"space-around", alignItems:"center", padding:"5px 12px 8px" }}>
-            {/* Speakers */}
-            <svg width="46" height="38" viewBox="0 0 46 38">
-              <rect x="1" y="4" width="13" height="28" rx="2" stroke={B} strokeWidth="1.2" fill={BG}/>
-              <circle cx="7.5" cy="22" r="5.5" stroke={B} strokeWidth="1.1" fill="none"/>
-              <circle cx="7.5" cy="22" r="2.2" fill={B} opacity=".35"/>
-              <rect x="2.5" y="7" width="8" height="5" rx="1" stroke={B} strokeWidth=".9" fill="none"/>
-              <rect x="24" y="4" width="13" height="28" rx="2" stroke={B} strokeWidth="1.2" fill={BG}/>
-              <circle cx="30.5" cy="22" r="5.5" stroke={B} strokeWidth="1.1" fill="none"/>
-              <circle cx="30.5" cy="22" r="2.2" fill={B} opacity=".35"/>
-              <rect x="25.5" y="7" width="8" height="5" rx="1" stroke={B} strokeWidth=".9" fill="none"/>
-            </svg>
-            {/* Clock */}
-            <svg width="36" height="38" viewBox="0 0 36 38">
-              <rect x="2" y="8" width="32" height="24" rx="3" stroke={B} strokeWidth="1.2" fill={BG}/>
-              <circle cx="18" cy="20" r="7.5" stroke={B} strokeWidth="1.1" fill="none"/>
-              <polyline points="18,14 18,20 22,23" stroke={B} strokeWidth="1.2" fill="none" strokeLinecap="round"/>
-              <rect x="7" y="1" width="5" height="8" rx="1" fill={B} opacity=".45"/>
-              <rect x="24" y="1" width="5" height="8" rx="1" fill={B} opacity=".45"/>
-            </svg>
-            {/* Washing machine */}
-            <svg width="34" height="38" viewBox="0 0 34 38">
-              <rect x="2" y="1" width="30" height="36" rx="2" stroke={B} strokeWidth="1.2" fill={BG}/>
-              <rect x="2" y="1" width="30" height="8" rx="2" fill={B} opacity=".18"/>
-              <circle cx="17" cy="24" r="8.5" stroke={B} strokeWidth="1.1" fill="none"/>
-              <circle cx="17" cy="24" r="4" stroke={B} strokeWidth="1" fill={B} opacity=".15"/>
-              <circle cx="6" cy="5" r="1.7" fill={B}/>
-              <circle cx="11" cy="5" r="1.7" fill={B} opacity=".5"/>
-            </svg>
-            {/* Dining */}
-            <svg width="54" height="38" viewBox="0 0 54 38">
-              <rect x="5" y="15" width="44" height="7" rx="2" stroke={B} strokeWidth="1.2" fill={BG}/>
-              <line x1="13" y1="22" x2="10" y2="37" stroke={B} strokeWidth="1.4"/>
-              <line x1="41" y1="22" x2="44" y2="37" stroke={B} strokeWidth="1.4"/>
-              <line x1="19" y1="22" x2="19" y2="37" stroke={B} strokeWidth="1.4"/>
-              <line x1="35" y1="22" x2="35" y2="37" stroke={B} strokeWidth="1.4"/>
-              <rect x="7" y="4" width="11" height="12" rx="1" stroke={B} strokeWidth="1" fill="none"/>
-              <rect x="36" y="4" width="11" height="12" rx="1" stroke={B} strokeWidth="1" fill="none"/>
-            </svg>
-            {/* Sofa */}
-            <svg width="54" height="38" viewBox="0 0 54 38">
-              <rect x="8" y="18" width="38" height="16" rx="3" stroke={B} strokeWidth="1.2" fill={BG}/>
-              <rect x="12" y="13" width="30" height="9" rx="2" stroke={B} strokeWidth="1.2" fill={BG}/>
-              <rect x="2" y="15" width="9" height="19" rx="2" stroke={B} strokeWidth="1.2" fill={BG}/>
-              <rect x="43" y="15" width="9" height="19" rx="2" stroke={B} strokeWidth="1.2" fill={BG}/>
-              <line x1="14" y1="34" x2="14" y2="38" stroke={B} strokeWidth="1.4"/>
-              <line x1="40" y1="34" x2="40" y2="38" stroke={B} strokeWidth="1.4"/>
-            </svg>
-            {/* TV */}
-            <svg width="48" height="38" viewBox="0 0 48 38">
-              <rect x="2" y="4" width="44" height="26" rx="3" stroke={B} strokeWidth="1.2" fill={BG}/>
-              <rect x="5" y="7" width="38" height="20" rx="1" stroke={B} strokeWidth="1" fill="none"/>
-              <line x1="20" y1="30" x2="17" y2="36" stroke={B} strokeWidth="1.4"/>
-              <line x1="28" y1="30" x2="31" y2="36" stroke={B} strokeWidth="1.4"/>
-              <line x1="14" y1="36" x2="34" y2="36" stroke={B} strokeWidth="1.2"/>
-            </svg>
-            {/* Mobile */}
-            <svg width="22" height="38" viewBox="0 0 22 38">
-              <rect x="2" y="1" width="18" height="36" rx="3" stroke={B} strokeWidth="1.2" fill={BG}/>
-              <rect x="4" y="5" width="14" height="23" rx="1" stroke={B} strokeWidth="1" fill="none"/>
-              <circle cx="11" cy="32.5" r="1.8" fill={B} opacity=".4"/>
-              <rect x="7.5" y="2.5" width="7" height="1.2" rx=".6" fill={B} opacity=".4"/>
-            </svg>
+          <div className="invoice-badge">
+            <p className="invoice-badge-label">Bill Number</p>
+            <p className="invoice-badge-value">{billNumber}</p>
+            <p className="invoice-badge-label" style={{ marginTop: "14px" }}>
+              Created
+            </p>
+            <p className="invoice-meta-value" style={{ marginTop: "8px", fontSize: "15px" }}>
+              {formatDateTime(bill.created_at)}
+            </p>
           </div>
         </div>
 
-        {/* ── BILL META FIELDS ── */}
-        <div style={{ padding:"6px 12px 8px", borderBottom:`1px solid ${B}` }}>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"5px 24px" }}>
-            <Field label="Bill No." value={billNo}  onChange={setBillNo}  placeholder="—" />
-            <Field label="Date"     value={date}    onChange={setDate}    type="date" />
-            <Field label="Name"     value={cname}   onChange={setCname}   placeholder="ग्राहक का नाम" />
-            <Field label="Mobile"   value={cmobile} onChange={setCmobile} placeholder="मोबाइल नं." />
-            <Field label="Address"  value={caddr}   onChange={setCaddr}   placeholder="पता" fullWidth />
+        {/* Quick customer and payment details. */}
+        <div className="invoice-meta">
+          <div className="invoice-meta-card">
+            <p className="invoice-meta-label">Date</p>
+            <p className="invoice-meta-value">{formatDate(bill.created_at)}</p>
+          </div>
+          <div className="invoice-meta-card">
+            <p className="invoice-meta-label">Payment Mode</p>
+            <p className="invoice-meta-value">{paymentMethod}</p>
+          </div>
+          <div className="invoice-meta-card">
+            <p className="invoice-meta-label">Customer Name</p>
+            <p className="invoice-meta-value">{customerName}</p>
+          </div>
+          <div className="invoice-meta-card">
+            <p className="invoice-meta-label">Mobile</p>
+            <p className="invoice-meta-value">{customerPhone}</p>
+          </div>
+          <div className="invoice-meta-card" style={{ gridColumn: "1 / -1", borderRight: "none" }}>
+            <p className="invoice-meta-label">Address</p>
+            <p className="invoice-meta-value">{customerAddress}</p>
           </div>
         </div>
 
-        {/* ── ITEMS TABLE ── */}
-        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11.5 }}>
-          <thead>
-            <tr style={{ background:B, color:"#fff" }}>
-              {[
-                [hNo,  setHNo,  30,  "center"],
-                [hPar, setHPar, null,"left"  ],
-                [hQty, setHQty, 52,  "center"],
-                [hRate,setHRate,84,  "center"],
-                [hAmt, setHAmt, 94,  "center"],
-              ].map(([val, setter, w, align], idx) => (
-                <th key={idx} style={{ padding:"5px 6px", borderRight: idx<4?"1px solid #6b82cc":"none",
-                  width: w||undefined, fontWeight:700 }}>
-                  <EI value={val} onChange={setter} style={{ color:"#fff", fontWeight:700, fontSize:11.5, textAlign:align }}/>
-                </th>
-              ))}
-              <th className="no-print" style={{ width:24, background:B }}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, i) => {
-              const amt = toNum(row.q) * toNum(row.r);
-              const bg  = i%2 ? BG : "#fff";
-              const bdr = `1px solid #c8d0e8`;
-              return (
-                <tr key={i} style={{ borderBottom: bdr }}>
-                  <td style={{ padding:"3px 4px", borderRight:bdr, textAlign:"center", color:"#777", background:bg, fontSize:11 }}>{i+1}</td>
-                  <td style={{ padding:"2px 4px", borderRight:bdr, background:bg }}>
-                    <input value={row.p} onChange={e=>updateRow(i,"p",e.target.value)} placeholder="विवरण / Item"
-                      style={{ border:"none", outline:"none", background:"transparent", fontFamily:"inherit", fontSize:11.5, color:"#111", width:"100%", padding:"2px" }}/>
-                  </td>
-                  <td style={{ padding:"2px 2px", borderRight:bdr, background:bg }}>
-                    <input type="number" value={row.q} onChange={e=>updateRow(i,"q",e.target.value)} placeholder="0"
-                      style={{ border:"none", outline:"none", background:"transparent", fontFamily:"inherit", fontSize:11.5, color:"#111", width:"100%", textAlign:"center", padding:"2px" }}/>
-                  </td>
-                  <td style={{ padding:"2px 2px", borderRight:bdr, background:bg }}>
-                    <input type="number" value={row.r} onChange={e=>updateRow(i,"r",e.target.value)} placeholder="0.00"
-                      style={{ border:"none", outline:"none", background:"transparent", fontFamily:"inherit", fontSize:11.5, color:"#111", width:"100%", textAlign:"right", padding:"2px" }}/>
-                  </td>
-                  <td style={{ padding:"3px 8px", textAlign:"right", fontWeight:600, color:"#222", background:bg }}>
-                    {amt>0 ? fmt(amt) : ""}
-                  </td>
-                  <td className="no-print" style={{ textAlign:"center", background:bg }}>
-                    <button onClick={()=>removeRow(i)} style={{ background:"none", border:"none", color:"#d44", fontSize:11, cursor:"pointer", padding:"0 2px" }}>✕</button>
-                  </td>
+        {/* Item table showing each purchased product and its pricing. */}
+        <div className="invoice-table-wrap">
+          <table className="invoice-table">
+            <thead>
+              <tr>
+                <th className="invoice-col-no">No.</th>
+                <th>Particular</th>
+                <th className="invoice-col-qty">Qty</th>
+                <th className="invoice-col-rate">Rate</th>
+                <th className="invoice-col-amount">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {printableRows.map((row, index) => (
+                // Empty padded rows keep the printed bill height consistent.
+                <tr key={`${row.description}-${index}`} className={!row.description ? "invoice-empty-row" : ""}>
+                  <td className="invoice-col-no">{row.description ? index + 1 : ""}</td>
+                  <td>{row.description}</td>
+                  <td className="invoice-col-qty">{row.quantity ? row.quantity : ""}</td>
+                  <td className="invoice-col-rate">{row.rate ? formatCurrency(row.rate) : ""}</td>
+                  <td className="invoice-col-amount">{row.amount ? formatCurrency(row.amount) : ""}</td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-        {/* ── FINANCE + TAXES ── */}
-        <div style={{ display:"flex", borderTop:`2px solid ${B}` }}>
-          <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", background:B, padding:"12px 16px" }}>
-            <EI value={finText} onChange={setFinText} style={{ fontSize:18, fontWeight:900, color:"#fff", textAlign:"center" }}/>
+        {/* Bottom summary with words and tax breakdown. */}
+        <div className="invoice-summary-wrap">
+          <div className="invoice-words-card">
+            <p className="invoice-words-label">Amount In Words</p>
+            <p className="invoice-words-value">{amountInWords}</p>
           </div>
-          <div style={{ width:200, borderLeft:`2px solid ${B}`, fontSize:12 }}>
-            {/* CGST */}
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 10px", borderBottom:`1px solid #c8d0e8` }}>
-              <EI value={cgstLbl} onChange={setCgstLbl} style={{ fontSize:12, color:"#555", width:80 }}/>
-              <span style={{ fontWeight:600 }}>₹{fmt(cgst)}</span>
+
+          <div className="invoice-summary-card">
+            <div className="invoice-summary-row">
+              <span>Subtotal</span>
+              <span>{formatCurrency(subtotal)}</span>
             </div>
-            {/* SGST */}
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 10px", borderBottom:`1px solid #c8d0e8` }}>
-              <EI value={sgstLbl} onChange={setSgstLbl} style={{ fontSize:12, color:"#555", width:80 }}/>
-              <span style={{ fontWeight:600 }}>₹{fmt(sgst)}</span>
+            <div className="invoice-summary-row">
+              <span>Discount</span>
+              <span>-{formatCurrency(discountAmount)}</span>
             </div>
-            {/* Total */}
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"7px 10px", background:B, color:"#fff" }}>
-              <EI value={totalLbl} onChange={setTotalLbl} style={{ fontSize:13, fontWeight:800, color:"#fff", width:60 }}/>
-              <span style={{ fontWeight:800, fontSize:13 }}>₹{fmt(total)}</span>
+            <div className="invoice-summary-row">
+              <span>Taxable Amount</span>
+              <span>{formatCurrency(taxableAmount)}</span>
+            </div>
+            <div className="invoice-summary-row">
+              <span>CGST (9%)</span>
+              <span>{formatCurrency(cgstAmount)}</span>
+            </div>
+            <div className="invoice-summary-row">
+              <span>SGST (9%)</span>
+              <span>{formatCurrency(sgstAmount)}</span>
+            </div>
+            <div className="invoice-summary-row invoice-summary-total">
+              <span>Total</span>
+              <span>{formatCurrency(totalAmount)}</span>
             </div>
           </div>
         </div>
 
-        {/* ── IN WORDS ── */}
-        <div style={{ display:"flex", alignItems:"center", borderTop:`1px solid ${B}`, padding:"5px 10px", fontSize:11 }}>
-          <EI value={inWordLbl} onChange={setInWordLbl} style={{ fontSize:11, fontWeight:700, color:"#333", width:72, flexShrink:0 }}/>
-          <span style={{ fontStyle:"italic", color:"#222", marginLeft:6 }}>{inWords}</span>
-        </div>
-
-        {/* ── FOOTER ── */}
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end",
-          borderTop:`2px solid ${B}`, padding:"8px 12px", background:BG }}>
-          <div style={{ flex:1 }}>
-            {notes.map((n, i) => (
-              <div key={i}>
-                <EI value={n} onChange={v => setNotes(prev => prev.map((x,idx)=>idx===i?v:x))}
-                  style={{ fontSize:10.5, color:"#333", width:"100%" }}/>
-              </div>
-            ))}
+        {/* Footer shows payment status and the signature area. */}
+        <div className="invoice-footer">
+          <div className="invoice-payment">
+            <div>Status: {capitalizeWords(bill.status ?? "paid")}</div>
+            <div>Generated on: {formatDateTime(bill.created_at)}</div>
           </div>
-          <div style={{ textAlign:"right", minWidth:155, marginLeft:12 }}>
-            <EI value={forText} onChange={setForText} style={{ fontSize:11, fontWeight:700, color:"#222", textAlign:"right" }}/>
-            <div style={{ borderTop:`1px solid ${B}`, paddingTop:3, marginTop:28 }}>
-              <EI value={sigText} onChange={setSigText} style={{ fontSize:10, color:"#555", textAlign:"center" }}/>
-            </div>
+
+          <div className="invoice-signature">
+            <div className="invoice-signature-company">For {companyName}</div>
+            <div className="invoice-signature-line" />
+            <div className="invoice-signature-label">Authorised Signature</div>
           </div>
         </div>
-
-      </div>{/* /bill */}
+      </div>
     </div>
-  );
+  )
 }
