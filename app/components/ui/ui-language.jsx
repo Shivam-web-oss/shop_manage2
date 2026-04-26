@@ -19,23 +19,26 @@ function toDate(value) {
 }
 
 export function UiLanguageProvider({ children }) {
-  const [language, setLanguageState] = useState("en")
+  const [language, setLanguageState] = useState(() => {
+    if (typeof window === "undefined") {
+      return "en"
+    }
 
-  useEffect(() => {
     try {
       const storedLanguage = window.localStorage.getItem(STORAGE_KEY)
       if (storedLanguage) {
-        setLanguageState(normalizeLanguage(storedLanguage))
-        return
+        return normalizeLanguage(storedLanguage)
       }
 
       if (window.navigator.language?.toLowerCase().startsWith("hi")) {
-        setLanguageState("hi")
+        return "hi"
       }
     } catch {
       // Ignore storage access errors and keep the default language.
     }
-  }, [])
+
+    return "en"
+  })
 
   useEffect(() => {
     const nextLanguage = normalizeLanguage(language)

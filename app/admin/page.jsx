@@ -1,31 +1,10 @@
-import { redirect } from 'next/navigation'
-import { createClient } from '../src/lib/supabase/server'
+import AdminBusinessDirectory from "@/app/components/admin/admin-business-directory"
+import { ROLES, requireRole } from "@/lib/authz"
+import { getAdminBusinessDirectory } from "@/lib/admin"
 
 export default async function AdminPage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
+  const context = await requireRole([ROLES.ADMIN])
+  const businesses = await getAdminBusinessDirectory(context.supabase)
 
-  if (authError || !user) {
-    redirect('/login')
-  }
-
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  if (profileError || profile?.role !== 'admin') {
-    redirect('/business')
-  }
-
-  return (
-    <div>
-      <h1>Admin access</h1>
-      <p>name - email - role(dropdown) - profile </p>
-    </div>
-  )
+  return <AdminBusinessDirectory businesses={businesses} />
 }
