@@ -1,3 +1,11 @@
+<!--
+BEGINNER NOTES
+File: AGENTS.md
+Purpose: Instructions that coding agents must follow when working in this repo.
+Data sources: Human-written project rules, especially the Next.js documentation requirement.
+Why this exists: Keeps automated code changes aligned with this project's Next.js version.
+-->
+
 <!-- BEGIN:nextjs-agent-rules -->
 # This is NOT the Next.js you know
 

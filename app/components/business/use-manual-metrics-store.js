@@ -1,5 +1,13 @@
 "use client"
 
+/**
+ * BEGINNER NOTES
+ * File: app/components/business/use-manual-metrics-store.js
+ * Purpose: Reusable UI component used by pages.
+ * Data sources: Search for `supabase.from(...)` (database), `fetch(...)` (HTTP), or props passed from a `page.jsx`.
+ * Why this exists: Keeps related logic/UI in one place so the app stays maintainable.
+ */
+
 import { useCallback, useEffect, useState } from "react"
 import { MANUAL_METRICS_STORAGE_KEY, getAllManualMetrics } from "@/lib/manual-metrics"
 

@@ -1,5 +1,13 @@
 "use client"
 
+/**
+ * BEGINNER NOTES
+ * File: app/components/ui/language-toggle.jsx
+ * Purpose: Reusable UI component used by pages.
+ * Data sources: Search for `supabase.from(...)` (database), `fetch(...)` (HTTP), or props passed from a `page.jsx`.
+ * Why this exists: Keeps related logic/UI in one place so the app stays maintainable.
+ */
+
 import { useUiLanguage } from "./ui-language"
 
 export default function LanguageToggle({ className = "" }) {

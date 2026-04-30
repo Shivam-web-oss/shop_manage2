@@ -1,5 +1,13 @@
 "use client"
 
+/**
+ * BEGINNER NOTES
+ * File: app/components/business/stock-adjuster.jsx
+ * Purpose: Reusable UI component used by pages.
+ * Data sources: Search for `supabase.from(...)` (database), `fetch(...)` (HTTP), or props passed from a `page.jsx`.
+ * Why this exists: Keeps related logic/UI in one place so the app stays maintainable.
+ */
+
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useShopScope } from "./use-shop-scope"
 
@@ -177,7 +185,7 @@ export default function StockAdjuster({ title = "Update Stock", subtitle = "Chan
                 <div>
                   <p className="font-medium text-[var(--foreground)]">{product.name}</p>
                   <p className="text-xs text-[var(--ink-muted)]">
-                    SKU: {product.sku || "N/A"} â€¢ Category: {product.category || "N/A"}
+                    SKU: {product.sku || "N/A"} | Category: {product.category || "N/A"}
                   </p>
                 </div>
                 <div className="text-sm text-[var(--foreground)]">

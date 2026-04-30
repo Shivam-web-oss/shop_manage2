@@ -1,5 +1,13 @@
 "use client"
 
+/**
+ * BEGINNER NOTES
+ * File: app/components/business/activity-board.jsx
+ * Purpose: Reusable UI component used by pages.
+ * Data sources: Search for `supabase.from(...)` (database), `fetch(...)` (HTTP), or props passed from a `page.jsx`.
+ * Why this exists: Keeps related logic/UI in one place so the app stays maintainable.
+ */
+
 import { useEffect, useState } from "react"
 import { useShopScope } from "./use-shop-scope"
 
@@ -18,7 +26,12 @@ const EMPTY_ACTIVITY_DATA = {
 }
 
 function currency(value) {
-  return `â‚¹${Number(value ?? 0).toFixed(2)}`
+  const numericValue = Number(value ?? 0)
+  const safeValue = Number.isFinite(numericValue) ? numericValue : 0
+  return `Rs. ${safeValue.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
 }
 
 export default function ActivityBoard({ limit = 20, compact = false }) {

@@ -1,5 +1,13 @@
 "use client"
 
+/**
+ * BEGINNER NOTES
+ * File: app/components/business/shop-card.jsx
+ * Purpose: Reusable UI component used by pages.
+ * Data sources: Search for `supabase.from(...)` (database), `fetch(...)` (HTTP), or props passed from a `page.jsx`.
+ * Why this exists: Keeps related logic/UI in one place so the app stays maintainable.
+ */
+
 import Link from "next/link"
 
 export default function ShopCard({

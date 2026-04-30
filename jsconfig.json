@@ -1,3 +1,8 @@
+// BEGINNER NOTES
+// File: jsconfig.json
+// Purpose: JavaScript project config that tells the editor and Next.js how imports should resolve.
+// Data sources: Local path aliases configured below.
+// Why this exists: Lets imports like `@/lib/...` point into the `app/src/lib/...` folder.
 {
   "compilerOptions": {
     "ignoreDeprecations": "6.0",

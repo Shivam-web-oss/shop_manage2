@@ -1,3 +1,9 @@
+# BEGINNER NOTES
+# File: .gitignore
+# Purpose: Tells Git which generated, local, or secret files should not be committed.
+# Data sources: File/folder patterns listed below.
+# Why this exists: Keeps dependencies, build output, editor files, and env secrets out of version control.
+
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies

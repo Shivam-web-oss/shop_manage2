@@ -1,5 +1,13 @@
 "use client"
 
+/**
+ * BEGINNER NOTES
+ * File: app/components/business/products-manager.jsx
+ * Purpose: Reusable UI component used by pages.
+ * Data sources: Search for `supabase.from(...)` (database), `fetch(...)` (HTTP), or props passed from a `page.jsx`.
+ * Why this exists: Keeps related logic/UI in one place so the app stays maintainable.
+ */
+
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useShopScope } from "./use-shop-scope"
 
@@ -13,7 +21,12 @@ const EMPTY_FORM = {
 }
 
 function toCurrency(value) {
-  return `â‚¹${Number(value ?? 0).toFixed(2)}`
+  const numericValue = Number(value ?? 0)
+  const safeValue = Number.isFinite(numericValue) ? numericValue : 0
+  return `Rs. ${safeValue.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
 }
 
 function toNumberInput(value) {
@@ -391,7 +404,7 @@ export default function ProductsManager() {
                   </div>
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                     <p className="text-xs text-[var(--ink-muted)]">
-                      Current: {toCurrency(product.price)} â€¢ Qty {Number(product.quantity ?? 0)} â€¢ Updated{" "}
+                      Current: {toCurrency(product.price)} | Qty {Number(product.quantity ?? 0)} | Updated{" "}
                       {product.updated_at ? new Date(product.updated_at).toLocaleString() : "N/A"}
                     </p>
                     <div className="flex gap-2">

@@ -1,12 +1,24 @@
+/**
+ * BEGINNER NOTES
+ * File: app/src/lib/authz.js
+ * Purpose: Shared server/client helper functions (business logic).
+ * Data sources: Search for `supabase.from(...)` (database), `fetch(...)` (HTTP), or props passed from a `page.jsx`.
+ * Why this exists: Keeps related logic/UI in one place so the app stays maintainable.
+ */
+
 import { redirect } from "next/navigation"
 import { createClient } from "./supabase/server"
 
+// App roles.
+// These strings are stored in `profiles.role` (Supabase) and sometimes in auth metadata.
 export const ROLES = Object.freeze({
   ADMIN: "admin",
   BUSINESS: "business",
   STAFF: "staff",
 })
 
+// Ensures we always end up with a known role string.
+// If the stored value is missing/invalid, we default to `BUSINESS`.
 export function normalizeRole(role) {
   const normalized = String(role ?? "")
     .trim()
@@ -27,6 +39,7 @@ export function normalizeRole(role) {
   return ROLES.BUSINESS
 }
 
+// When we know a user's role, choose the right "home" page for them.
 export function getHomeRouteByRole(role) {
   const normalizedRole = normalizeRole(role)
 
@@ -41,11 +54,16 @@ export function getHomeRouteByRole(role) {
   return "/business"
 }
 
+// Staff and business users can use the employee workspace screens.
 export function canAccessEmployeeWorkspace(role) {
   const normalizedRole = normalizeRole(role)
   return normalizedRole === ROLES.STAFF || normalizedRole === ROLES.BUSINESS
 }
 
+// Reads auth + profile for the current request.
+// Data sources:
+// - Supabase Auth session cookies
+// - Supabase table `profiles` (full_name/email/role)
 export async function getAuthContext() {
   const supabase = await createClient()
   const {
@@ -53,6 +71,7 @@ export async function getAuthContext() {
     error: authError,
   } = await supabase.auth.getUser()
 
+  // If user is missing, the caller is not logged in.
   if (authError || !user) {
     return {
       supabase,
@@ -69,6 +88,7 @@ export async function getAuthContext() {
     .eq("id", user.id)
     .maybeSingle()
 
+  // Even if profile is missing, we still compute a role (defaulting if needed).
   const role = normalizeRole(profile?.role ?? user.user_metadata?.role)
 
   return {
@@ -80,6 +100,7 @@ export async function getAuthContext() {
   }
 }
 
+// Enforces login: redirects to `/login` when no user is present.
 export async function requireAuth(redirectTo = "/login") {
   const context = await getAuthContext()
 
@@ -90,6 +111,7 @@ export async function requireAuth(redirectTo = "/login") {
   return context
 }
 
+// Enforces a role: redirects away if the current user's role isn't allowed.
 export async function requireRole(allowedRoles, fallbackPath) {
   const context = await requireAuth()
   const roles = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles]
@@ -101,6 +123,7 @@ export async function requireRole(allowedRoles, fallbackPath) {
   return context
 }
 
+// Convenience wrapper: only allow STAFF/BUSINESS to access employee workspace pages.
 export async function requireEmployeeWorkspaceAccess() {
   const context = await requireAuth()
 

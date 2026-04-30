@@ -1,3 +1,9 @@
+-- BEGINNER NOTES
+-- File: app/components/staff/schema.sql
+-- Purpose: Reusable UI component used by pages.
+-- Data sources: Search for `supabase.from(...)` (database), `fetch(...)` (HTTP), or props passed from a `page.jsx`.
+-- Why this exists: Keeps related logic/UI in one place so the app stays maintainable.
+
 -- ============================================================
 -- EMPLOYEE PORTAL - SUPABASE SCHEMA
 -- Run these in the Supabase SQL Editor (in order)

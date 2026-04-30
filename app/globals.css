@@ -1,5 +1,14 @@
+/**
+ * BEGINNER NOTES
+ * File: app/globals.css
+ * Purpose: Global styles, theme colors, reusable utility classes, and app-wide typography.
+ * Data sources: CSS variables in `:root` are reused by components through `var(...)`.
+ * Why this exists: Keeps the visual system consistent across all pages.
+ */
+
 @import "tailwindcss";
 
+/* Theme tokens: change these once to update the whole app's colors/shadows/fonts. */
 :root {
   --background: #eff5f8;
   --foreground: #122033;
@@ -20,6 +29,7 @@
   --font-display: "Palatino Linotype", "Book Antiqua", Georgia, serif;
 }
 
+/* Use border-box sizing so padding/borders do not unexpectedly grow elements. */
 * {
   box-sizing: border-box;
 }

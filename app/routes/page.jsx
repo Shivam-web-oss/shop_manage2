@@ -1,3 +1,12 @@
+/**
+ * BEGINNER NOTES
+ * File: app/routes/page.jsx
+ * Purpose: Demo dashboard-style page with hardcoded shop/stat examples.
+ * Data sources: The `stats` and `shops` arrays in this file, not the database.
+ * Why this exists: Gives a simple visual route for testing dashboard layout ideas.
+ */
+
+// Hardcoded card data shown at the top of the page.
 const stats = [
   {
     label: "Total Shops",
@@ -29,6 +38,7 @@ const stats = [
   },
 ]
 
+// Hardcoded shop list used by this demo page.
 const shops = [
   {
     name: "Downtown Store",

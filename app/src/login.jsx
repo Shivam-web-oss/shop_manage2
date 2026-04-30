@@ -1,5 +1,13 @@
 'use client'
 
+/**
+ * BEGINNER NOTES
+ * File: app/src/login.jsx
+ * Purpose: Project file.
+ * Data sources: Search for `supabase.from(...)` (database), `fetch(...)` (HTTP), or props passed from a `page.jsx`.
+ * Why this exists: Keeps related logic/UI in one place so the app stays maintainable.
+ */
+
 import Link from 'next/link'
 import { useActionState } from 'react'
 import { useFormStatus } from 'react-dom'

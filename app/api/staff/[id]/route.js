@@ -1,3 +1,11 @@
+/**
+ * BEGINNER NOTES
+ * File: app/api/staff/[id]/route.js
+ * Purpose: Server API endpoint (HTTP route).
+ * Data sources: Search for `supabase.from(...)` (database), `fetch(...)` (HTTP), or props passed from a `page.jsx`.
+ * Why this exists: Keeps related logic/UI in one place so the app stays maintainable.
+ */
+
 import { NextResponse } from "next/server"
 import { getApiAuthContext, hasAnyRole } from "@/lib/api-auth"
 import { ROLES } from "@/lib/authz"

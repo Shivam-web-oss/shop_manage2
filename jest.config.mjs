@@ -1,3 +1,11 @@
+/**
+ * BEGINNER NOTES
+ * File: jest.config.mjs
+ * Purpose: Project build/tool configuration.
+ * Data sources: Search for `supabase.from(...)` (database), `fetch(...)` (HTTP), or props passed from a `page.jsx`.
+ * Why this exists: Keeps related logic/UI in one place so the app stays maintainable.
+ */
+
 import nextJest from 'next/jest.js'
 
 const createJestConfig = nextJest({

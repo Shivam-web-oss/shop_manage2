@@ -1,8 +1,19 @@
+/**
+ * BEGINNER NOTES
+ * File: app/src/lib/shop-access.js
+ * Purpose: Shared server/client helper functions (business logic).
+ * Data sources: Search for `supabase.from(...)` (database), `fetch(...)` (HTTP), or props passed from a `page.jsx`.
+ * Why this exists: Keeps related logic/UI in one place so the app stays maintainable.
+ */
+
 import { ROLES } from "./authz"
 import { DENIED_STAFF_PERMISSIONS, mapPermissionsFromRow } from "./staff-permissions"
 
+// Columns we read from the `business` table when listing/reading shops.
 const SHOP_SELECT_FIELDS = "id, user_id, company_name, shop_name, location, description, created_at"
+// Columns we read from the `staff_permissions` table when checking staff access.
 const STAFF_ACCESS_FIELDS = "staff_user_id, business_owner_id, can_create_bill, can_update_stock, can_view_reports"
+// A UUID that should never match real data; used to force "no results" queries safely.
 const EMPTY_SCOPE_UUID = "00000000-0000-0000-0000-000000000000"
 
 const SHOP_ACCESS_TABLE_SETUP_MESSAGE =
@@ -23,6 +34,7 @@ function buildFailure(status, message, extras = {}) {
 }
 
 export function normalizeRequestedShopId(...values) {
+  // Picks the first non-empty shop id from several possible sources.
   for (const value of values) {
     const normalizedValue = toTrimmedString(value)
     if (normalizedValue) {
@@ -34,6 +46,7 @@ export function normalizeRequestedShopId(...values) {
 }
 
 export function getShopIdFromRequest(request) {
+  // Helper for API routes: reads `?shopId=...` from the URL.
   if (!request?.url) {
     return null
   }
@@ -42,6 +55,8 @@ export function getShopIdFromRequest(request) {
 }
 
 export async function listOwnedShops(supabase, businessOwnerId) {
+  // Lists shops for a business owner.
+  // Data source: `business` table filtered by `user_id` (owner id).
   const { data, error } = await supabase
     .from("business")
     .select(SHOP_SELECT_FIELDS)
@@ -65,6 +80,8 @@ export async function listOwnedShops(supabase, businessOwnerId) {
 }
 
 export async function findOwnedShop(supabase, businessOwnerId, shopId) {
+  // Finds a single shop owned by the given owner.
+  // Why: prevents accessing another owner's shop by guessing IDs.
   const normalizedShopId = toTrimmedString(shopId)
 
   if (!normalizedShopId) {
@@ -99,6 +116,8 @@ export async function findOwnedShop(supabase, businessOwnerId, shopId) {
 }
 
 export async function getStaffAccessRow(supabase, staffUserId) {
+  // Loads staff permissions (what a staff user is allowed to do).
+  // Data source: `staff_permissions` table (one row per staff user).
   const { data, error } = await supabase
     .from("staff_permissions")
     .select(STAFF_ACCESS_FIELDS)
@@ -173,6 +192,7 @@ function buildEmptyScope(status, message, extras = {}) {
 }
 
 export function serializeShopScope(scope) {
+  // Converts the scope object into a small JSON-friendly shape for client components.
   if (!scope?.ok) {
     return {
       shops: [],
@@ -196,6 +216,7 @@ export function serializeShopScope(scope) {
 }
 
 export function applyShopScope(query, scope, columnName = "shop_id") {
+  // Applies shop scoping to a Supabase query so staff only sees allowed shop data.
   if (!scope?.scopedShopIds?.length) {
     return query.eq(columnName, EMPTY_SCOPE_UUID)
   }
@@ -256,6 +277,13 @@ function resolveActiveShop(accessibleShops, requestedShopId, { requireActiveShop
 }
 
 export async function resolveShopScope(context, options = {}) {
+  // Main entrypoint: decides which shops the current user can access.
+  // Data sources:
+  // - `business` table (shops)
+  // - `staff_permissions` table (staff access)
+  // Inputs:
+  // - `context` comes from auth helpers (`requireAuth` / `getAuthContext`)
+  // - `options.requestedShopId` can come from UI or `?shopId=...`
   const requestedShopId = normalizeRequestedShopId(options.requestedShopId)
   const requireActiveShop = options.requireActiveShop === true
   const defaultToFirstShop = options.defaultToFirstShop === true

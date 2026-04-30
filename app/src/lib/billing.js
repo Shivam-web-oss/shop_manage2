@@ -1,8 +1,19 @@
+/**
+ * BEGINNER NOTES
+ * File: app/src/lib/billing.js
+ * Purpose: Shared server/client helper functions (business logic).
+ * Data sources: Search for `supabase.from(...)` (database), `fetch(...)` (HTTP), or props passed from a `page.jsx`.
+ * Why this exists: Keeps related logic/UI in one place so the app stays maintainable.
+ */
+
 function toNumber(value, fallback = 0) {
+  // Normalize unknown input into a safe number for math.
   const numericValue = Number(value)
   return Number.isFinite(numericValue) ? numericValue : fallback
 }
 
+// Calculates bill totals (subtotal, discount, GST, total).
+// Inputs typically come from the bill-creation UI and the selected cart items.
 export function calculateBillTotals(cartItems = [], discountPercent = 0, gstPercent = 18) {
   const subtotal = cartItems.reduce((sum, item) => sum + toNumber(item.unit_price) * toNumber(item.quantity), 0)
   const discount = Math.max(toNumber(discountPercent), 0)
@@ -19,6 +30,8 @@ export function calculateBillTotals(cartItems = [], discountPercent = 0, gstPerc
   }
 }
 
+// Normalizes a single cart item (safe strings/numbers).
+// Why: prevents NaN/negative quantities and keeps data consistent.
 export function normalizeCartItem(item = {}) {
   return {
     product_id: item.product_id,

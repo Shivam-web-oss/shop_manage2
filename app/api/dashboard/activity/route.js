@@ -1,3 +1,11 @@
+/**
+ * BEGINNER NOTES
+ * File: app/api/dashboard/activity/route.js
+ * Purpose: Server API endpoint (HTTP route).
+ * Data sources: Search for `supabase.from(...)` (database), `fetch(...)` (HTTP), or props passed from a `page.jsx`.
+ * Why this exists: Keeps related logic/UI in one place so the app stays maintainable.
+ */
+
 import { NextResponse } from "next/server"
 import { getApiAuthContext, hasAnyRole } from "@/lib/api-auth"
 import { ROLES } from "@/lib/authz"
@@ -34,6 +42,15 @@ function compareByTimeDesc(a, b) {
   return aTime > bTime ? -1 : 1
 }
 
+function formatMoney(value) {
+  const numericValue = Number(value ?? 0)
+  const safeValue = Number.isFinite(numericValue) ? numericValue : 0
+  return `Rs. ${safeValue.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
+}
+
 function getSchemaAwareMessage(error) {
   return isMissingSchemaError(error)
     ? "Billing data is not fully set up in Supabase yet. Run the latest billing SQL for this project and redeploy."
@@ -47,7 +64,7 @@ function buildBillActivities(bills, schema) {
       id: `${schema === "modern" ? "order" : "bill"}-${bill.id}`,
       type: schema === "modern" ? "order" : "bill",
       title: `${schema === "modern" ? "Order" : "Bill"} created for ${bill.customer_name || "Walk-in"}`,
-      description: `Amount Rs.${Number(bill.total_amount ?? 0).toFixed(2)}${paymentMethod}`,
+      description: `Amount ${formatMoney(bill.total_amount)}${paymentMethod}`,
       timestamp: bill.created_at,
     }
   })

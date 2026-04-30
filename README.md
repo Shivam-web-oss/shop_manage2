@@ -1,3 +1,11 @@
+<!--
+BEGINNER NOTES
+File: README.md
+Purpose: Basic project overview and local development instructions.
+Data sources: Standard Next.js starter README content.
+Why this exists: Helps a developer start and run the app locally.
+-->
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started

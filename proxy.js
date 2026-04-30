@@ -1,3 +1,11 @@
+/**
+ * BEGINNER NOTES
+ * File: proxy.js
+ * Purpose: Project file.
+ * Data sources: Search for `supabase.from(...)` (database), `fetch(...)` (HTTP), or props passed from a `page.jsx`.
+ * Why this exists: Keeps related logic/UI in one place so the app stays maintainable.
+ */
+
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 

@@ -1,3 +1,11 @@
+/**
+ * BEGINNER NOTES
+ * File: app/landingpage/landingpage.css
+ * Purpose: Small CSS file for the landing page route.
+ * Data sources: Class names used by `app/landingpage/page.jsx`.
+ * Why this exists: Keeps landing page styling separate from the rest of the app.
+ */
+
 .landing-main {
   padding: 2rem;
   font-family: system-ui, sans-serif;

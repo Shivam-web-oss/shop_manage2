@@ -1,5 +1,15 @@
+/**
+ * BEGINNER NOTES
+ * File: app/src/lib/billing-storage.js
+ * Purpose: Shared server/client helper functions (business logic).
+ * Data sources: Search for `supabase.from(...)` (database), `fetch(...)` (HTTP), or props passed from a `page.jsx`.
+ * Why this exists: Keeps related logic/UI in one place so the app stays maintainable.
+ */
+
 import { applyShopScope } from "./shop-access"
 
+// These error codes/messages commonly show up when Supabase tables/columns aren't created yet.
+// Why: the app supports different billing schemas (modern vs legacy) and needs friendly setup messages.
 const MISSING_SCHEMA_ERROR_CODES = new Set(["42P01", "42703", "PGRST200", "PGRST205"])
 const MISSING_SCHEMA_ERROR_FRAGMENTS = [
   "could not find the table",
@@ -11,6 +21,7 @@ const MISSING_SCHEMA_ERROR_FRAGMENTS = [
 export const BILLING_SCHEMA_SETUP_MESSAGE =
   "Billing tables are not set up in Supabase yet. Run the latest billing SQL for this project, then redeploy the app."
 
+// Columns selected from `customers` for UI screens.
 export const CUSTOMER_SELECT_FIELDS = "id, shop_id, name, email, phone"
 
 function getErrorText(error) {
@@ -21,6 +32,7 @@ function getErrorText(error) {
 }
 
 export function isMissingSchemaError(error) {
+  // Detects "missing table/column" conditions so we can show setup guidance instead of a scary error.
   const code = String(error?.code ?? "").trim()
   if (MISSING_SCHEMA_ERROR_CODES.has(code)) {
     return true
@@ -31,6 +43,8 @@ export function isMissingSchemaError(error) {
 }
 
 export async function detectBillingSchema(supabase) {
+  // Detect whether the DB has the "modern" schema first.
+  // Data sources: `customers`, `orders`, `order_items` tables.
   const modernChecks = await Promise.all([
     supabase.from("customers").select("id").limit(1),
     supabase.from("orders").select("id").limit(1),
@@ -52,6 +66,8 @@ export async function detectBillingSchema(supabase) {
     }
   }
 
+  // If modern schema isn't present, try the "legacy" billing tables.
+  // Data sources: `bills`, `bill_items` tables.
   const legacyChecks = await Promise.all([
     supabase.from("bills").select("id").limit(1),
     supabase.from("bill_items").select("id").limit(1),
@@ -81,6 +97,8 @@ export async function detectBillingSchema(supabase) {
 }
 
 export async function getScopedCustomerIds(supabase, scope) {
+  // Returns customer ids only for shops the current user is allowed to see.
+  // Data source: `customers` table filtered by shop scope.
   let query = supabase.from("customers").select("id, shop_id")
   query = applyShopScope(query, scope)
 
@@ -98,6 +116,7 @@ export async function getScopedCustomerIds(supabase, scope) {
 }
 
 export async function getCustomersByIds(supabase, scope, customerIds) {
+  // Fetch customer rows for a list of ids, while still applying shop scope.
   const normalizedIds = [...new Set((customerIds ?? []).filter(Boolean))]
   if (!normalizedIds.length) {
     return {
@@ -134,6 +153,7 @@ export async function getCustomersByIds(supabase, scope, customerIds) {
 }
 
 export function mapOrderRow(order) {
+  // Normalizes an "order" row into a common bill shape for UI/reporting.
   const customer = order?.customer ?? order?.customers ?? null
   const totalAmount = Number(order?.total ?? 0)
 
@@ -156,6 +176,7 @@ export function mapOrderRow(order) {
 }
 
 export function mapLegacyBillRow(bill) {
+  // Normalizes a legacy "bill" row into the same common bill shape.
   return {
     id: bill?.id ?? null,
     shop_id: bill?.shop_id ?? bill?.business_id ?? null,
